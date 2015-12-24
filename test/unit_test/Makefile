@@ -1,17 +1,16 @@
 CC=g++
 CFLAGS=-std=c++11 -O3 -Wall
 #CFLAGS=-std=c++11 -g -Wall -pg -ftest-coverage -fprofile-arcs
-INCLUDE=-I.. -I../../coroutine/unit_test/gtest_unit/gtest/include
-LINK=-L../../coroutine/unit_test/gtest_unit/gtest/lib/.libs -lcoroutine -ldl -lnetwork -lgtest_main -lgtest -lpthread -L..\
+INCLUDE=-I../../src -I../../third_party/libgo/third_party/gtest/include
+LINK=-L../../build -L../../build/third_party/libgo -L../../third_party/libgo/third_party/gtest/build -llibgonet -llibgo -ldl -lgtest_main -lgtest -lpthread \
 	 -lboost_thread -lboost_system -lboost_regex -lpthread
 #LINK+=-static -static-libgcc -static-libstdc++
 TARGET=$(patsubst %.cpp, %.t, $(wildcard *.cpp))
 
-all : /usr/lib/libgtest.a $(TARGET)
+all : ../../third_party/libgo/third_party/gtest/build/libgtest.a $(TARGET)
 
-/usr/lib/libgtest.a:
-	cd ../../coroutine/unit_test/gtest_unit/gtest && ./configure && make
-	sudo cp gtest/lib/.libs/* /usr/lib
+../../third_party/libgo/third_party/gtest/build/libgtest.a:
+	cd ../../third_party/libgo/third_party/gtest/ && mkdir -p build && cd build && cmake .. && make -j4
 
 %.t: %.o
 	@echo "LD $@"

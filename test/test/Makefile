@@ -1,7 +1,7 @@
 CC=g++
 CFLAGS=-std=c++11 -g -Wall
-INCLUDE=-I..
-LINK=-lcoroutine -ldl -lnetwork -lpthread -L..\
+INCLUDE=-I../../src -I../../third_party/libgo/src
+LINK=-L../../build -L../../build/third_party/libgo -llibgonet -llibgo -ldl -lpthread \
 	 -lboost_thread -lboost_system -lboost_regex -lpthread
 TARGET=$(patsubst %.cpp, %.t, $(wildcard *.cpp))
 
