@@ -10,9 +10,9 @@ using namespace co;
 using namespace network;
 
 #define MB / (1024 * 1024)
-//#define MB
+
 std::string g_url = "tcp://127.0.0.1:3050";
-int g_thread_count = 4;
+int g_thread_count = 2;
 std::atomic<int> g_conn{0};
 std::atomic<unsigned long long> g_server_send{0};
 std::atomic<unsigned long long> g_server_send_err{0};
@@ -96,8 +96,13 @@ void start_client(std::string url, bool *bexit)
 //    printf("client exit\n");
 }
 
-void show_status()
+void show_status(bool* bexit)
 {
+    if (*bexit) {
+        printf("show end\n");
+        return ;
+    }
+
     static int s_c = 0;
     if (s_c++ % 10 == 0) {
         // print title
@@ -119,11 +124,11 @@ void show_status()
     unsigned long long client_send_err = g_client_send_err - last_client_send_err;
     unsigned long long client_recv = g_client_recv - last_client_recv;
 
-    printf("%6d | %6d | %10llu | %10llu | %10llu | %10llu | %10llu | %10llu |%8llu | %d\n",
+    printf("%6d | %6d | %7llu MB | %7llu MB | %7llu MB | %7llu MB | %7llu MB | %7llu MB |%8llu | %d\n",
             s_c, (int)g_conn,
             server_send MB, server_send_err MB, server_recv MB,
             client_send MB, client_send_err MB, client_recv MB,
-            client_recv / g_max_pack, (int)g_max_pack);
+            (client_recv / std::max((int)g_max_pack, 1)), (int)g_max_pack);
 
     last_server_send = g_server_send;
     last_server_send_err = g_server_send_err;
@@ -131,6 +136,8 @@ void show_status()
     last_client_send = g_client_send;
     last_client_send_err = g_client_send_err;
     last_client_recv = g_client_recv;
+
+    co_timer_add(std::chrono::seconds(1), [=]{ show_status(bexit); });
 }
 
 using ::testing::TestWithParam;
@@ -147,28 +154,22 @@ TEST_P(Benchmark, BenchmarkT)
 //    co_sched.GetOptions().debug = network::dbg_session_alive;
 //    co_sched.GetOptions().debug = network::dbg_session_alive | co::dbg_hook;
 
-    bool bexit = false;
+    bool *bexit = new bool(false);
 //    bool bexit = true;
-    go [&]{ start_server(g_url, &bexit); };
+    go [&]{ start_server(g_url, bexit); };
     
     for (int i = 0; i < n_; ++i)
-        go [&]{ start_client(g_url, &bexit); };
+        go [&]{ start_client(g_url, bexit); };
 
-    co_timer_add(std::chrono::seconds(10), [&]{ bexit = true; });
+    co_timer_add(std::chrono::seconds(10), [=]{ *bexit = true; });
+    co_timer_add(std::chrono::milliseconds(500), [=]{ show_status(bexit); });
 
-    boost::thread_group tg;
-    for (int i = 0; i < g_thread_count; ++i)
-        tg.create_thread([]{ co_sched.RunUntilNoTask(); });
+    co_sched.RunUntilNoTask();
 
-    for (;;) {
-        if (bexit) {
-            tg.join_all();
-            break;
-        }
-
-        sleep(1);
-        show_status();
-    }
+//    boost::thread_group tg;
+//    for (int i = 0; i < g_thread_count; ++i)
+//        tg.create_thread([]{ co_sched.RunUntilNoTask(); });
+//    tg.join_all();
 }
 
 
