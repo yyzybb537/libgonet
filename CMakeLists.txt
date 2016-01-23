@@ -11,7 +11,7 @@ endif()
 
 message("CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 
-set(CXX_FLAGS "-std=c++11 -Wall -Werror -fPIC")
+set(CMAKE_CXX_FLAGS "-std=c++11 -Wall -Werror -fPIC")
 
 aux_source_directory(src SRC_LIST)
 include_directories("src")
