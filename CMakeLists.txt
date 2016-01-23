@@ -3,9 +3,15 @@ cmake_minimum_required(VERSION 2.8)
 
 ##################################################################################
 project(libgonet)
+
+if (CMAKE_BUILD_TYPE)
+else()
+    set(CMAKE_BUILD_TYPE RELEASE)
+endif()
+
+message("CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
+
 set(CXX_FLAGS "-std=c++11 -Wall -Werror -fPIC")
-set(CMAKE_CXX_FLAGS "-g ${CXX_FLAGS}")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 ${CXX_FLAGS}")
 
 aux_source_directory(src SRC_LIST)
 include_directories("src")
