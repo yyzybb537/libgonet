@@ -10,7 +10,7 @@
 #include <boost/intrusive/list.hpp>
 #include <boost/variant.hpp>
 #include <boost/function.hpp>
-#include <coroutine/coroutine.h>
+#include <libgo/coroutine.h>
 #include "error.h"
 #include "abstract.h"
 #include "option.h"
@@ -36,8 +36,11 @@ class TcpSession
 public:
     struct Msg
     {
+        struct shutdown_msg_t {};
+
         std::atomic<bool> timeout{false};
         bool send_half = false;
+        bool shutdown = false;
         std::size_t pos = 0;
         uint64_t id;
         SndCb cb;
@@ -45,6 +48,7 @@ public:
         Buffer buf;
 
         Msg(uint64_t uid, SndCb ocb) : id(uid), cb(ocb) {}
+        explicit Msg(shutdown_msg_t) : shutdown(true) {}
     };
     typedef co_chan<boost::shared_ptr<Msg>> MsgChan;
     typedef std::list<boost::shared_ptr<Msg>> MsgList;
@@ -54,7 +58,7 @@ public:
     void goStart();
     void Send(Buffer && buf, SndCb const& cb = NULL);
     void Send(const void* data, size_t bytes, SndCb const& cb = NULL);
-    void Shutdown();
+    void Shutdown(bool immediately = false);
     bool IsEstab();
     tcp_sess_id_t GetId();
 
@@ -63,6 +67,8 @@ private:
     void goSend();
     void SetCloseEc(boost_ec const& ec);
     void OnClose();
+    void ShutdownSend();
+    void ShutdownRecv();
 
 private:
     shared_ptr<tcp::socket> socket_;
@@ -71,9 +77,12 @@ private:
     uint64_t msg_id_;
     MsgChan msg_chan_;
     MsgList msg_send_list_;
-    std::atomic<int> shutdown_ref_;
     co_mutex close_ec_mutex_;
     boost_ec close_ec_;
+
+    std::atomic<bool> send_shutdown_{false};
+    std::atomic<bool> recv_shutdown_{false};
+    co_mutex closed_;
 
 public:
     tcp::endpoint local_addr_;

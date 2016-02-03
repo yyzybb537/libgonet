@@ -1,10 +1,10 @@
 #include <iostream>
 #include <unistd.h>
 #include <gtest/gtest.h>
-#include <coroutine/coroutine.h>
+#include <libgo/coroutine.h>
 #include <boost/thread.hpp>
 #include <atomic>
-#include "network.h"
+#include <libgonet/network.h>
 using namespace std;
 using namespace co;
 using namespace network;
@@ -12,7 +12,7 @@ using namespace network;
 #define MB / (1024 * 1024)
 
 std::string g_url = "tcp://127.0.0.1:3050";
-int g_thread_count = 2;
+int g_thread_count = 4;
 std::atomic<int> g_conn{0};
 std::atomic<unsigned long long> g_server_send{0};
 std::atomic<unsigned long long> g_server_send_err{0};
@@ -20,13 +20,16 @@ std::atomic<unsigned long long> g_server_recv{0};
 std::atomic<unsigned long long> g_client_send{0};
 std::atomic<unsigned long long> g_client_send_err{0};
 std::atomic<unsigned long long> g_client_recv{0};
-std::atomic<int> g_max_pack{0};
 
+int recv_buffer_length = 40960;
 char g_data[4096] = {1, 2};
+const size_t g_max_pack = sizeof(g_data);
+int pipeline = 10000;
 
 void start_server(std::string url, bool *bexit)
 {
     Server s;
+    s.SetMaxPackSize(recv_buffer_length);
     auto proto = s.GetProtocol();
     s.SetConnectedCb([&](SessionId){ ++g_conn; })
         .SetDisconnectedCb([&](SessionId, boost_ec const&){ --g_conn; })
@@ -41,13 +44,17 @@ void start_server(std::string url, bool *bexit)
                     if (!bytes)
                         printf("error bytes is zero.\n");
 
-                    if ((int)bytes > g_max_pack)
-                        g_max_pack = bytes;
+//                    if ((int)bytes > g_max_pack)
+//                        g_max_pack = bytes;
 
-                    proto->Send(sess, data, bytes, [&, bytes](boost_ec ec){
-                            if (ec) g_server_send_err += bytes;
-                            else g_server_send += bytes;
-                        });
+                    size_t send_bytes = 0;
+                    for (;send_bytes < bytes; send_bytes += g_max_pack) {
+                        size_t send_b = std::min(bytes - send_bytes, g_max_pack);
+                        proto->Send(sess, data, send_b, [&, send_b](boost_ec ec){
+                                if (ec) g_server_send_err += send_b;
+                                else g_server_send += send_b;
+                            });
+                    }
                     return bytes;
                 });
     boost_ec ec = s.goStart(url);
@@ -62,16 +69,23 @@ void start_server(std::string url, bool *bexit)
 void start_client(std::string url, bool *bexit)
 {
     Client c;
+    c.SetMaxPackSize(recv_buffer_length);
     auto proto = c.GetProtocol();
     c.SetReceiveCb(
             [&, proto](SessionId sess, const void* data, size_t bytes)
             {
                 g_client_recv += bytes;
 
-                proto->Send(sess, data, bytes, [&, bytes](boost_ec ec){
-                    if (ec) g_client_send_err += bytes;
-                    else g_client_send += bytes;
-                    });
+                size_t send_bytes = 0;
+                for (;send_bytes < bytes; send_bytes += g_max_pack)
+                {
+                    size_t send_b = std::min(bytes - send_bytes, g_max_pack);
+                    proto->Send(sess, data, send_b, [&, send_b](boost_ec ec){
+                        if (ec) g_client_send_err += send_b;
+                        else g_client_send += send_b;
+                        });
+                }
+
                 return bytes;
             });
     boost_ec ec = c.Connect(url);
@@ -83,7 +97,9 @@ void start_client(std::string url, bool *bexit)
         return ;
     }
 
-    c.Send(g_data, sizeof(g_data));
+    for (int i = 0; i < pipeline; ++i)
+        c.Send(g_data, sizeof(g_data));
+
     while (!*bexit) {
         sleep(1);
 
@@ -164,17 +180,17 @@ TEST_P(Benchmark, BenchmarkT)
     co_timer_add(std::chrono::seconds(10), [=]{ *bexit = true; });
     co_timer_add(std::chrono::milliseconds(500), [=]{ show_status(bexit); });
 
-    co_sched.RunUntilNoTask();
+//    co_sched.RunUntilNoTask();
 
-//    boost::thread_group tg;
-//    for (int i = 0; i < g_thread_count; ++i)
-//        tg.create_thread([]{ co_sched.RunUntilNoTask(); });
-//    tg.join_all();
+    boost::thread_group tg;
+    for (int i = 0; i < g_thread_count; ++i)
+        tg.create_thread([]{ co_sched.RunUntilNoTask(); });
+    tg.join_all();
 }
 
 
 INSTANTIATE_TEST_CASE_P(
         BenchmarkTest,
         Benchmark,
-        Values(1, 100));
+        Values(1, 10));
 //Values(100, 1000, 10000));

@@ -1,9 +1,9 @@
 CC=g++
 #CFLAGS=-std=c++11 -O3 -Wall
 CFLAGS=-std=c++11 -g -O3 -Wall -pg -ftest-coverage -fprofile-arcs
-INCLUDE=-I../../src -I../../third_party/libgo/third_party/gtest/include
-LINK=-L../../build -L../../build/third_party/libgo -L../../third_party/libgo/third_party/gtest/build -llibgonet -llibgo -ldl -lgtest_main -lgtest -lpthread \
-	 -lboost_thread -lboost_system -lboost_regex -lpthread
+INCLUDE=-I../../third_party/libgo/third_party/gtest/include
+LINK=-L../../third_party/libgo/third_party/gtest/build -llibgonet -llibgo -ldl -lgtest_main -lgtest -lpthread \
+	 -lboost_thread -lboost_system -lboost_regex -lpthread -static -static-libgcc -static-libstdc++
 #LINK+=-static -static-libgcc -static-libstdc++
 TARGET=$(patsubst %.cpp, %.t, $(wildcard *.cpp))
 

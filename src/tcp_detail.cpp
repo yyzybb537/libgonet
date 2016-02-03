@@ -12,7 +12,7 @@ namespace tcp_detail {
     }
 
     TcpSession::TcpSession(shared_ptr<tcp::socket> s, shared_ptr<LifeHolder> holder, uint32_t max_pack_size)
-        : socket_(s), holder_(holder), recv_buf_(max_pack_size), msg_chan_(-1), shutdown_ref_{2}
+        : socket_(s), holder_(holder), recv_buf_(max_pack_size), msg_chan_(-1)
     {
         boost_ec ignore_ec;
         local_addr_ = s->local_endpoint(ignore_ec);
@@ -88,17 +88,36 @@ namespace tcp_detail {
 
                 if (ec) {
                     SetCloseEc(ec);
-                    boost_ec ignore_ec;
-                    socket_->shutdown(socket_base::shutdown_both, ignore_ec);
-                    if (--shutdown_ref_ == 0)
-                        OnClose();
-
                     DebugPrint(dbg_session_alive, "TcpSession receive shutdown %s:%d",
                             remote_addr_.address().to_string().c_str(), remote_addr_.port());
+
+                    ShutdownRecv();
                     return ;
                 } 
             }
         };
+    }
+
+    void TcpSession::ShutdownSend()
+    {
+        boost_ec ignore_ec;
+        socket_->shutdown(socket_base::shutdown_send, ignore_ec);
+        send_shutdown_ = true;
+        if (recv_shutdown_)
+            OnClose();
+        else
+            socket_->shutdown(socket_base::shutdown_receive, ignore_ec);
+    }
+
+    void TcpSession::ShutdownRecv()
+    {
+        boost_ec ignore_ec;
+        socket_->shutdown(socket_base::shutdown_receive, ignore_ec);
+        recv_shutdown_ = true;
+        if (send_shutdown_)
+            OnClose();
+        else
+            msg_chan_ << boost::make_shared<Msg>(Msg::shutdown_msg_t{});
     }
 
     void TcpSession::goSend()
@@ -108,30 +127,28 @@ namespace tcp_detail {
             auto holder = this_ptr;
             for (;;)
             {
-                if (shutdown_ref_ == 1) {
-                    --shutdown_ref_;
-                    DebugPrint(dbg_session_alive, "TcpSession send shutdown with cond %s:%d",
-                            remote_addr_.address().to_string().c_str(), remote_addr_.port());
-                    OnClose();
-                    return ;
-                }
-
                 static const int c_multi = 1024;
 
-                for (int i = 0; i < c_multi; ++i)
+                int remain = c_multi - msg_send_list_.size();
+                for (int i = 0; i < remain; ++i)
                 {
                     boost::shared_ptr<Msg> msg;
-                    if (!msg_chan_.TryPop(msg)) break;
-                    if (msg->timeout) {
+                    if (!msg_chan_.TryPop(msg)) {
+                        if (msg_send_list_.empty()) {
+                            msg_chan_ >> msg;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if (msg->shutdown) {    // shutdown notify
+                        ShutdownSend();
+                        return ;
+                    } else if (msg->timeout) {
                         if (msg->cb)
                             msg->cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_timeout));
                     } else
                         msg_send_list_.push_back(msg);
-                }
-
-                if (msg_send_list_.empty()) {
-                    co_yield;
-                    continue;
                 }
 
                 // Make buffers
@@ -165,15 +182,9 @@ namespace tcp_detail {
                 std::size_t n = socket_->write_some(buffers, ec);
                 if (ec) {
                     SetCloseEc(ec);
-
-                    boost_ec ignore_ec;
-                    socket_->shutdown(socket_base::shutdown_both, ignore_ec);
-                    if (--shutdown_ref_ == 0) {
-                        OnClose();
-                    }
-
                     DebugPrint(dbg_session_alive, "TcpSession send shutdown with write_some %s:%d",
                             remote_addr_.address().to_string().c_str(), remote_addr_.port());
+                    ShutdownSend();
                     return ;
                 }
 
@@ -199,13 +210,14 @@ namespace tcp_detail {
 
     void TcpSession::SetCloseEc(boost_ec const& ec)
     {
-        std::lock_guard<co_mutex> lock(close_ec_mutex_);
-        if (!close_ec_)
+        if (close_ec_mutex_.try_lock() && !close_ec_)
             close_ec_ = ec;
     }
 
     void TcpSession::OnClose()
     {
+        if (!closed_.try_lock()) return ;
+
         DebugPrint(dbg_session_alive, "TcpSession close %s:%d",
                 remote_addr_.address().to_string().c_str(), remote_addr_.port());
         boost_ec ignore_ec;
@@ -229,15 +241,15 @@ namespace tcp_detail {
 
     void TcpSession::Send(Buffer && buf, SndCb const& cb)
     {
-        if (shutdown_ref_ < 2) {
-            if (cb)
-                cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
-            return ;
-        }
-
         if (buf.empty()) {
             if (cb)
                 cb(boost_ec());
+            return ;
+        }
+
+        if (recv_shutdown_ || send_shutdown_) {
+            if (cb)
+                cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
             return ;
         }
 
@@ -267,11 +279,13 @@ namespace tcp_detail {
         Send(std::move(buf), cb);
     }
 
-    void TcpSession::Shutdown()
+    void TcpSession::Shutdown(bool immediately)
     {
         SetCloseEc(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
         boost_ec ignore_ec;
-        socket_->shutdown(socket_base::shutdown_both, ignore_ec);
+        socket_->shutdown(
+                immediately ? socket_base::shutdown_both : socket_base::shutdown_receive,
+                ignore_ec);
     }
 
     bool TcpSession::IsEstab()

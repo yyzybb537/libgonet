@@ -3,7 +3,7 @@
 #include <boost/asio.hpp>
 #include <boost/function.hpp>
 #include "error.h"
-#include <coroutine/coroutine.h>
+#include <libgo/coroutine.h>
 
 namespace network {
 
