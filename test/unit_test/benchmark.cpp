@@ -12,7 +12,7 @@ using namespace network;
 #define MB / (1024 * 1024)
 
 std::string g_url = "tcp://127.0.0.1:3050";
-int g_thread_count = 4;
+int g_thread_count = 2;
 std::atomic<int> g_conn{0};
 std::atomic<unsigned long long> g_server_send{0};
 std::atomic<unsigned long long> g_server_send_err{0};
@@ -22,7 +22,7 @@ std::atomic<unsigned long long> g_client_send_err{0};
 std::atomic<unsigned long long> g_client_recv{0};
 
 int recv_buffer_length = 40960;
-char g_data[4096] = {1, 2};
+char g_data[16 * 1024] = {1, 2};
 const size_t g_max_pack = sizeof(g_data);
 int pipeline = 10000;
 
