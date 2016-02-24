@@ -1,7 +1,6 @@
 #include <iostream>
 #include <unistd.h>
 #include <string.h>
-#include <coroutine/coroutine.h>
 #include "network.h"
 using namespace std;
 using namespace co;
@@ -15,16 +14,22 @@ void on_disconnect(SessionId id, boost_ec const& ec)
 void foo(std::string url)
 {
     Client client;
-    auto proto = client.GetProtocol();
-    client.SetConnectedCb([proto](SessionId id){
+    client.SetConnectedCb([&](SessionId id){
         printf("connected.\n");
-        go [id, proto] {
-            for (;;)
+        go [&] {
+            int i = 0;
+            for (;;++i)
             {
-                if (proto->IsEstab(id))
-                    proto->Send(id, "ping", 4, [](boost_ec ec){
+                if (client.IsEstab()) {
+                    if (i == 3)
+                        client.Send("shutdown", 8, [](boost_ec ec){
                             printf("send returns %s\n", ec.message().c_str());
-                        });
+                            });
+                    else
+                        client.Send("ping", 4, [](boost_ec ec){
+                            printf("send returns %s\n", ec.message().c_str());
+                            });
+                }
                 else
                     return ;
 
@@ -48,7 +53,7 @@ void foo(std::string url)
 
     for (;;)
     {
-        if (proto->IsEstab(client.GetSessId()))
+        if (client.IsEstab())
             co_yield;
         else
             client.Connect(url);

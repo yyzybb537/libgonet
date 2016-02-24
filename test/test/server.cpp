@@ -1,6 +1,5 @@
 #include <iostream>
 #include <unistd.h>
-#include <coroutine/coroutine.h>
 #include "network.h"
 using namespace std;
 using namespace co;
@@ -19,16 +18,15 @@ int main(int argc, char** argv)
     }
 
     Server server;
-    auto proto = server.GetProtocol();
-    server.SetConnectedCb([proto](SessionId id){
-        printf("connected from %s:%d\n", proto->RemoteAddr(id).address().to_string().c_str(), proto->RemoteAddr(id).port());
+    server.SetConnectedCb([&](SessionId id){
+        printf("connected from %s:%d\n", server.RemoteAddr(id).address().to_string().c_str(), server.RemoteAddr(id).port());
     }).SetDisconnectedCb([](SessionId id, boost_ec const& ec) {
         printf("disconnected. reason %d:%s\n", ec.value(), ec.message().c_str());
-    }).SetReceiveCb([proto](SessionId id, const char* data, size_t bytes){
+    }).SetReceiveCb([&](SessionId id, const char* data, size_t bytes){
         printf("receive: %.*s\n", (int)bytes, data);
-        proto->Send(id, data, bytes);
+        server.Send(id, data, bytes);
         if (strstr(std::string(data, bytes).c_str(), "shutdown")) {
-            proto->Shutdown(id);
+            server.Shutdown(id);
         }
         return bytes;
     });

@@ -314,12 +314,16 @@ namespace tcp_detail {
         };
         return boost_ec();
     }
-
     void TcpServerImpl::ShutdownAll()
     {
-        std::lock_guard<co_mutex> lock(sessions_mutex_);
-        for (auto &v : sessions_)
-            v.second->Shutdown();
+        {
+            std::lock_guard<co_mutex> lock(sessions_mutex_);
+            for (auto &v : sessions_)
+                v.second->Shutdown(true);
+        }
+
+        while (!sessions_.empty())
+            co_sleep(1);
     }
     void TcpServerImpl::Shutdown()
     {
@@ -357,7 +361,12 @@ namespace tcp_detail {
 
             {
                 std::lock_guard<co_mutex> lock(sessions_mutex_);
-                sessions_[sess->GetId()] = sess;
+                if (shutdown_) {
+                    sess->Shutdown(true);
+                    continue;
+                }
+                else
+                    sessions_[sess->GetId()] = sess;
             }
 
             sess->SetSndTimeout(opt_.sndtimeo_)
@@ -382,6 +391,10 @@ namespace tcp_detail {
         return local_addr_;
     }
 
+    std::size_t TcpServerImpl::SessionCount()
+    {
+        return sessions_.size();
+    }
 
     boost_ec TcpClientImpl::Connect(endpoint addr)
     {
@@ -417,9 +430,16 @@ namespace tcp_detail {
 
     TcpClient::~TcpClient()
     {
+        Shutdown(true);
+        while (impl_->sess_)
+            co_sleep(1);
+    }
+
+    void TcpClient::Shutdown(bool immediately)
+    {
         auto sess = impl_->GetSessId();
         if (sess)
-            sess->Shutdown();
+            sess->Shutdown(immediately);
     }
 
 } //namespace tcp_detail

@@ -99,6 +99,7 @@ public:
     void ShutdownAll();
     void Shutdown();
     tcp::endpoint LocalAddr();
+    std::size_t SessionCount();
 
 private:
     void Accept();
@@ -171,6 +172,7 @@ private:
     shared_ptr<TcpSession> sess_;
     co_mutex connect_mtx_;
     friend TcpSession;
+    friend class TcpClient;
 };
 
 class TcpClient
@@ -196,6 +198,7 @@ public:
     {
         return this;
     }
+    void Shutdown(bool immediately = false);
 
 private:
     shared_ptr<TcpClientImpl> impl_;

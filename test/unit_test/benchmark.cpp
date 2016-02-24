@@ -30,15 +30,17 @@ void start_server(std::string url, bool *bexit)
 {
     Server s;
     s.SetMaxPackSize(recv_buffer_length);
-    auto proto = s.GetProtocol();
     s.SetConnectedCb([&](SessionId){ ++g_conn; })
-        .SetDisconnectedCb([&](SessionId, boost_ec const&){ --g_conn; })
+        .SetDisconnectedCb([&](SessionId, boost_ec const&){
+//                printf("server: disconnected!\n");
+                --g_conn;
+                })
         .SetReceiveCb(
-                [&, proto](SessionId sess, const void* data, size_t bytes)
+                [&](SessionId sess, const void* data, size_t bytes)
                 {
 //                    printf("recv %u bytes from %s:%d\n", (uint32_t)bytes,
-//                        proto->RemoteAddr(sess).address().to_string().c_str(),
-//                        proto->RemoteAddr(sess).port());
+//                        s.RemoteAddr(sess).address().to_string().c_str(),
+//                        s.RemoteAddr(sess).port());
 
                     g_server_recv += bytes;
                     if (!bytes)
@@ -50,7 +52,7 @@ void start_server(std::string url, bool *bexit)
                     size_t send_bytes = 0;
                     for (;send_bytes < bytes; send_bytes += g_max_pack) {
                         size_t send_b = std::min(bytes - send_bytes, g_max_pack);
-                        proto->Send(sess, data, send_b, [&, send_b](boost_ec ec){
+                        s.Send(sess, data, send_b, [&, send_b](boost_ec ec){
                                 if (ec) g_server_send_err += send_b;
                                 else g_server_send += send_b;
                             });
@@ -70,9 +72,8 @@ void start_client(std::string url, bool *bexit)
 {
     Client c;
     c.SetMaxPackSize(recv_buffer_length);
-    auto proto = c.GetProtocol();
     c.SetReceiveCb(
-            [&, proto](SessionId sess, const void* data, size_t bytes)
+            [&](SessionId sess, const void* data, size_t bytes)
             {
                 g_client_recv += bytes;
 
@@ -80,13 +81,16 @@ void start_client(std::string url, bool *bexit)
                 for (;send_bytes < bytes; send_bytes += g_max_pack)
                 {
                     size_t send_b = std::min(bytes - send_bytes, g_max_pack);
-                    proto->Send(sess, data, send_b, [&, send_b](boost_ec ec){
+                    c.Send(data, send_b, [&, send_b](boost_ec ec){
                         if (ec) g_client_send_err += send_b;
                         else g_client_send += send_b;
                         });
                 }
 
                 return bytes;
+            });
+    c.SetDisconnectedCb([](SessionId, boost_ec ec){
+//            printf("client: disconnected!\n");
             });
     boost_ec ec = c.Connect(url);
     if (ec) {
@@ -103,7 +107,7 @@ void start_client(std::string url, bool *bexit)
     while (!*bexit) {
         sleep(1);
 
-        if (!proto->IsEstab(c.GetSessId())) {
+        if (!c.IsEstab()) {
             go [=]{ start_client(url, bexit); };
             return ;
         }
