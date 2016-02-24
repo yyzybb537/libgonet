@@ -46,6 +46,7 @@ namespace udp_detail {
         boost_ec ignore_ec;
         socket_->shutdown(socket_base::shutdown_both, ignore_ec);
         DebugPrint(dbg_session_alive, "udp::Shutdown");
+        recv_shutdown_channel_ >> nullptr;
         if (opt_.disconnect_cb_)
             opt_.disconnect_cb_(GetSessId(), MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
     }
@@ -61,20 +62,22 @@ namespace udp_detail {
             udp::endpoint from_addr;
             std::size_t addrlen = from_addr.size();
             ::boost::asio::detail::socket_ops::buf b{&recv_buf_[0], recv_buf_.size()};
-            std::size_t n = ::boost::asio::detail::socket_ops::recvfrom(socket_->native_handle(),
+            ssize_t n = ::boost::asio::detail::socket_ops::recvfrom(socket_->native_handle(),
                     &b, 1, 0, from_addr.data(), &addrlen, ec);
-            if (!ec)
+            if (!ec && n > 0) {
                 from_addr.resize(addrlen);
 
-            if (!ec && opt_.receive_cb_) {
-                udp_sess_id_t sess_id = boost::make_shared<_udp_sess_id_t>(this->shared_from_this(), from_addr);
-                opt_.receive_cb_(sess_id, &recv_buf_[0], n);
+                if (opt_.receive_cb_) {
+                    udp_sess_id_t sess_id = boost::make_shared<_udp_sess_id_t>(this->shared_from_this(), from_addr);
+                    opt_.receive_cb_(sess_id, &recv_buf_[0], n);
+                }
             }
 
             if (shutdown_) break;
         }
 
         DebugPrint(dbg_session_alive, "udp::DoRecv exit");
+        recv_shutdown_channel_ << nullptr;
     }
 
     boost_ec UdpPointImpl::Send(std::string const& host, uint16_t port, const void* data, std::size_t bytes)

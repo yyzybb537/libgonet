@@ -63,6 +63,7 @@ private:
     std::atomic<bool> shutdown_{false};
     std::atomic<bool> init_{false};
     Buffer recv_buf_;
+    co_chan<void> recv_shutdown_channel_{1};
 };
 
 class UdpPoint

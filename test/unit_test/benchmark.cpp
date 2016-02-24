@@ -30,10 +30,8 @@ void start_server(std::string url, bool *bexit)
 {
     Server s;
     s.SetMaxPackSize(recv_buffer_length);
-    s.SetConnectedCb([&](SessionId){ ++g_conn; })
-        .SetDisconnectedCb([&](SessionId, boost_ec const&){
+    s.SetDisconnectedCb([&](SessionId, boost_ec const&){
 //                printf("server: disconnected!\n");
-                --g_conn;
                 })
         .SetReceiveCb(
                 [&](SessionId sess, const void* data, size_t bytes)
@@ -65,6 +63,7 @@ void start_server(std::string url, bool *bexit)
     while (!*bexit)
         sleep(1);
 
+    s.Shutdown();
 //    printf("server exit\n");
 }
 
@@ -72,7 +71,8 @@ void start_client(std::string url, bool *bexit)
 {
     Client c;
     c.SetMaxPackSize(recv_buffer_length);
-    c.SetReceiveCb(
+    c.SetConnectedCb([&](SessionId){ ++g_conn; })
+        .SetReceiveCb(
             [&](SessionId sess, const void* data, size_t bytes)
             {
                 g_client_recv += bytes;
@@ -91,6 +91,7 @@ void start_client(std::string url, bool *bexit)
             });
     c.SetDisconnectedCb([](SessionId, boost_ec ec){
 //            printf("client: disconnected!\n");
+            --g_conn;
             });
     boost_ec ec = c.Connect(url);
     if (ec) {
@@ -113,6 +114,7 @@ void start_client(std::string url, bool *bexit)
         }
     }
 
+    c.Shutdown();
 //    printf("client exit\n");
 }
 
