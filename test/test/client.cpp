@@ -1,7 +1,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <string.h>
-#include "network.h"
+#include <libgonet/network.h>
 using namespace std;
 using namespace co;
 using namespace network;
