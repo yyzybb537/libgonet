@@ -21,7 +21,7 @@ using boost_ec = boost::system::error_code;
 using boost::shared_ptr;
 
 class UdpPointImpl;
-struct _udp_sess_id_t : public ::network::SessionIdBase
+struct _udp_sess_id_t : public ::network::SessionBase
 {
     shared_ptr<UdpPointImpl> udp_point;
     udp::endpoint remote_addr;
@@ -29,7 +29,14 @@ struct _udp_sess_id_t : public ::network::SessionIdBase
     _udp_sess_id_t(shared_ptr<UdpPointImpl> const& point,
             udp::endpoint const& addr)
         : udp_point(point), remote_addr(addr)
-        {}
+    {}
+
+    virtual void Send(Buffer && buf, SndCb const& cb = NULL) override;
+    virtual void Send(const void* data, size_t bytes, SndCb const& cb = NULL) override;
+    virtual bool IsEstab() override;
+    virtual void Shutdown(bool immediately = false) override;
+    virtual endpoint LocalAddr() override;
+    virtual endpoint RemoteAddr() override;
 };
 typedef shared_ptr<_udp_sess_id_t> udp_sess_id_t;
 
@@ -47,7 +54,7 @@ public:
     boost_ec Send(const void* data, size_t bytes);
     udp::endpoint LocalAddr();
     udp::endpoint RemoteAddr();
-    udp_sess_id_t GetSessId();
+    udp_sess_id_t GetSession();
 
 private:
     virtual void OnSetMaxPackSize() override;
@@ -116,9 +123,9 @@ public:
     {
         return this;
     }
-    SessionId GetSessId()
+    SessionEntry GetSession()
     {
-        return impl_->GetSessId();
+        return impl_->GetSession();
     }
 
 private:

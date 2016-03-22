@@ -4,6 +4,46 @@
 namespace network {
 namespace udp_detail {
 
+    void _udp_sess_id_t::Send(Buffer && buf, const SndCb & cb)
+    {
+        if (!udp_point) {
+            if (cb)
+                cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+            return ;
+        }
+
+        boost_ec ec = udp_point->Send(remote_addr, buf.data(), buf.size());
+        if (cb) cb(ec);
+    }
+    void _udp_sess_id_t::Send(const void * data, size_t bytes, const SndCb & cb)
+    {
+        if (!udp_point) {
+            if (cb)
+                cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+            return ;
+        }
+
+        boost_ec ec = udp_point->Send(remote_addr, data, bytes);
+        if (cb) cb(ec);
+    }
+    bool _udp_sess_id_t::IsEstab()
+    {
+        return true;
+    }
+    void _udp_sess_id_t::Shutdown(bool)
+    {
+        return ;
+    }
+    endpoint _udp_sess_id_t::LocalAddr()
+    {
+        if (!udp_point) return endpoint();
+        return endpoint(udp_point->LocalAddr(), proto_type::udp);
+    }
+    endpoint _udp_sess_id_t::RemoteAddr()
+    {
+        return endpoint(remote_addr, proto_type::udp);
+    }
+
     UdpPointImpl::UdpPointImpl()
     {
         recv_buf_.resize(opt_.max_pack_size_);
@@ -48,7 +88,7 @@ namespace udp_detail {
         DebugPrint(dbg_session_alive, "udp::Shutdown");
         recv_shutdown_channel_ >> nullptr;
         if (opt_.disconnect_cb_)
-            opt_.disconnect_cb_(GetSessId(), MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+            opt_.disconnect_cb_(GetSession(), MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
     }
     void UdpPointImpl::OnSetMaxPackSize()
     {
@@ -109,7 +149,7 @@ namespace udp_detail {
             remote_addr_ = addr;
 
             if (opt_.connect_cb_)
-                opt_.connect_cb_(GetSessId());
+                opt_.connect_cb_(GetSession());
         }
         return ec;
     }
@@ -133,7 +173,7 @@ namespace udp_detail {
     {
         return remote_addr_;
     }
-    udp_sess_id_t UdpPointImpl::GetSessId()
+    udp_sess_id_t UdpPointImpl::GetSession()
     {
         return boost::make_shared<_udp_sess_id_t>(this->shared_from_this(), remote_addr_);
     }

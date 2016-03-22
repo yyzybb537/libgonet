@@ -6,7 +6,7 @@ using namespace std;
 using namespace co;
 using namespace network;
 
-void on_disconnect(SessionId id, boost_ec const& ec)
+void on_disconnect(SessionEntry sess, boost_ec const& ec)
 {
     printf("disconnected. reason %d:%s\n", ec.value(), ec.message().c_str());
 }
@@ -14,7 +14,7 @@ void on_disconnect(SessionId id, boost_ec const& ec)
 void foo(std::string url)
 {
     Client client;
-    client.SetConnectedCb([&](SessionId id){
+    client.SetConnectedCb([&](SessionEntry sess){
         printf("connected.\n");
         go [&] {
             int i = 0;
@@ -38,7 +38,7 @@ void foo(std::string url)
         };
     })
     .SetDisconnectedCb(&on_disconnect)
-    .SetReceiveCb([](SessionId id, const char* data, size_t bytes){
+    .SetReceiveCb([](SessionEntry sess, const char* data, size_t bytes){
             printf("receive: %.*s\n", (int)bytes, data);
             return bytes;
         });

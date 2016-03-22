@@ -39,7 +39,14 @@ namespace network {
 
         template <typename Proto>
             explicit endpoint(::boost::asio::ip::basic_endpoint<Proto> const& ep)
-            : base_t(ep.addres(), ep.port())
+            : base_t(ep.address(), ep.port())
+            {
+            }
+
+        template <typename Proto>
+            explicit endpoint(::boost::asio::ip::basic_endpoint<Proto> const& ep,
+                    proto_type proto)
+            : base_t(ep.address(), ep.port()), proto_(proto)
             {
             }
 
@@ -70,12 +77,63 @@ namespace network {
         std::string path_;
     };
 
+    typedef std::vector<char> Buffer;
+    typedef boost::function<void(boost_ec const&)> SndCb;
+
     struct OptionsBase;
-    struct SessionIdBase
+    struct SessionBase
     {
-        virtual ~SessionIdBase() {}
+        virtual ~SessionBase() {}
+
+        virtual void Send(Buffer && buf, SndCb const& cb = NULL) = 0;
+        virtual void Send(const void* data, size_t bytes, SndCb const& cb = NULL) = 0;
+        virtual bool IsEstab() = 0;
+        virtual void Shutdown(bool immediately = false) = 0;
+        virtual endpoint LocalAddr() = 0;
+        virtual endpoint RemoteAddr() = 0;
     };
-    typedef boost::shared_ptr<SessionIdBase> SessionId;
+
+    struct FakeSession : public SessionBase
+    {
+        virtual void Send(Buffer && buf, SndCb const& cb = NULL) override;
+        virtual void Send(const void* data, size_t bytes, SndCb const& cb = NULL) override;
+        virtual bool IsEstab() override;
+        virtual void Shutdown(bool immediately = false) override;
+        virtual endpoint LocalAddr() override;
+        virtual endpoint RemoteAddr() override;
+    };
+
+    class SessionEntry
+    {
+        typedef boost::shared_ptr<SessionBase> SessionImpl;
+        SessionImpl impl_;
+
+    public:
+        SessionEntry() = default;
+        SessionEntry(SessionImpl impl);
+
+        template <typename S>
+        SessionEntry(boost::shared_ptr<S> s_impl,
+                typename std::enable_if<std::is_base_of<SessionBase, S>::value>::type* = nullptr)
+        {
+            impl_ = boost::static_pointer_cast<SessionBase>(s_impl);
+        }
+
+        // This method can avoid dereference null pointer crash.
+        // It's always returns a valid pointer.
+        SessionBase* operator->() const;
+
+        friend bool operator<(SessionEntry const& lhs, SessionEntry const& rhs)
+        {
+            return lhs.GetPtr() < rhs.GetPtr();
+        }
+
+    private:
+        SessionBase* GetPtr() const;
+    };
+
+    typedef boost::function<size_t(SessionEntry, const char* data, size_t bytes)> ReceiveCb;
+
     struct ServerBase
     {
         virtual ~ServerBase() {}
@@ -87,22 +145,17 @@ namespace network {
     {
         virtual ~ClientBase() {}
         virtual boost_ec Connect(endpoint addr) = 0;
-        virtual SessionId GetSessId() = 0;
+        virtual SessionEntry GetSession() = 0;
         virtual OptionsBase* GetOptions() = 0;
     };
 
-    typedef std::vector<char> Buffer;
-    typedef boost::function<void(boost_ec const&)> SndCb;
-    typedef boost::function<size_t(SessionId, const char* data, size_t bytes)> ReceiveCb;
-
     // ----- tcp protocol effect only ------
-    typedef boost::function<void(SessionId)> ConnectedCb;
-    typedef boost::function<void(SessionId, boost_ec const&)> DisconnectedCb;
+    typedef boost::function<void(SessionEntry)> ConnectedCb;
+    typedef boost::function<void(SessionEntry, boost_ec const&)> DisconnectedCb;
     // -------------------------------------
 
     struct Protocol
     {
-        typedef ::network::SessionId sess_id_t;
         typedef ::network::endpoint endpoint;
         virtual ~Protocol() {}
 
@@ -112,14 +165,8 @@ namespace network {
         int protocol() const;
         int family() const;
 
-        virtual void Send(sess_id_t id, Buffer && buf, SndCb const& cb = NULL) {}
-        virtual void Send(sess_id_t id, const void* data, size_t bytes, SndCb const& cb = NULL) {}
-        virtual void Shutdown(sess_id_t id) {}
-        virtual bool IsEstab(sess_id_t id) { return true; }
-        virtual endpoint LocalAddr(sess_id_t id) { return endpoint(); }
-        virtual endpoint RemoteAddr(sess_id_t id) { return endpoint(); }
-        virtual boost::shared_ptr<ServerBase> CreateServer() {return NULL;}
-        virtual boost::shared_ptr<ClientBase> CreateClient() {return NULL;}
+        virtual boost::shared_ptr<ServerBase> CreateServer() { return boost::shared_ptr<ServerBase>(); };
+        virtual boost::shared_ptr<ClientBase> CreateClient() { return boost::shared_ptr<ClientBase>(); };
 
     protected:
         explicit Protocol(int family, proto_type proto = proto_type::tcp)

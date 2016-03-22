@@ -24,14 +24,14 @@ using boost_ec = boost::system::error_code;
 using boost::shared_ptr;
 
 class TcpSession;
-typedef shared_ptr<TcpSession> tcp_sess_id_t;
+typedef shared_ptr<TcpSession> TcpSessionEntry;
 class LifeHolder {};
 
 io_service& GetTcpIoService();
 
 class TcpServerImpl;
 class TcpSession
-    : public Options<TcpSession>, public boost::enable_shared_from_this<TcpSession>, public SessionIdBase
+    : public Options<TcpSession>, public boost::enable_shared_from_this<TcpSession>, public SessionBase
 {
 public:
     struct Msg
@@ -56,11 +56,14 @@ public:
     explicit TcpSession(shared_ptr<tcp::socket> s, shared_ptr<LifeHolder> holder, uint32_t max_pack_size);
     ~TcpSession();
     void goStart();
-    void Send(Buffer && buf, SndCb const& cb = NULL);
-    void Send(const void* data, size_t bytes, SndCb const& cb = NULL);
-    void Shutdown(bool immediately = false);
-    bool IsEstab();
-    tcp_sess_id_t GetId();
+    TcpSessionEntry GetSession();
+
+    virtual void Send(Buffer && buf, SndCb const& cb = NULL) override;
+    virtual void Send(const void* data, size_t bytes, SndCb const& cb = NULL) override;
+    virtual void Shutdown(bool immediately = false) override;
+    virtual bool IsEstab() override;
+    virtual endpoint LocalAddr() override;
+    virtual endpoint RemoteAddr() override;
 
 private:
     void goReceive();
@@ -84,7 +87,6 @@ private:
     std::atomic<bool> recv_shutdown_{false};
     co_mutex closed_;
 
-public:
     tcp::endpoint local_addr_;
     tcp::endpoint remote_addr_;
 };
@@ -93,7 +95,7 @@ class TcpServerImpl
     : public Options<TcpServerImpl>, public LifeHolder, public boost::enable_shared_from_this<TcpServerImpl>
 {
 public:
-    typedef std::map<::network::SessionId, shared_ptr<TcpSession>> Sessions;
+    typedef std::map<::network::SessionEntry, shared_ptr<TcpSession>> Sessions;
 
     boost_ec goStart(endpoint addr);
     void ShutdownAll();
@@ -103,7 +105,7 @@ public:
 
 private:
     void Accept();
-    void OnSessionClose(::network::SessionId id, boost_ec const& ec);
+    void OnSessionClose(::network::SessionEntry id, boost_ec const& ec);
 
 private:
     shared_ptr<tcp::acceptor> acceptor_;
@@ -163,10 +165,10 @@ class TcpClientImpl
 {
 public:
     boost_ec Connect(endpoint addr);
-    tcp_sess_id_t GetSessId();
+    TcpSessionEntry GetSession();
 
 private:
-    void OnSessionClose(::network::SessionId id, boost_ec const& ec);
+    void OnSessionClose(::network::SessionEntry id, boost_ec const& ec);
 
 private:
     shared_ptr<TcpSession> sess_;
@@ -190,9 +192,9 @@ public:
         auto impl = impl_;
         return impl->Connect(addr);
     }
-    SessionId GetSessId()
+    SessionEntry GetSession()
     {
-        return impl_->GetSessId();
+        return impl_->GetSession();
     }
     OptionsBase* GetOptions()
     {

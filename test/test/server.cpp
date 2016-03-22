@@ -18,15 +18,15 @@ int main(int argc, char** argv)
     }
 
     Server server;
-    server.SetConnectedCb([&](SessionId id){
-        printf("connected from %s:%d\n", server.RemoteAddr(id).address().to_string().c_str(), server.RemoteAddr(id).port());
-    }).SetDisconnectedCb([](SessionId id, boost_ec const& ec) {
+    server.SetConnectedCb([&](SessionEntry sess){
+        printf("connected from %s:%d\n", sess->RemoteAddr().address().to_string().c_str(), sess->RemoteAddr().port());
+    }).SetDisconnectedCb([](SessionEntry, boost_ec const& ec) {
         printf("disconnected. reason %d:%s\n", ec.value(), ec.message().c_str());
-    }).SetReceiveCb([&](SessionId id, const char* data, size_t bytes){
+    }).SetReceiveCb([&](SessionEntry sess, const char* data, size_t bytes){
         printf("receive: %.*s\n", (int)bytes, data);
-        server.Send(id, data, bytes);
+        sess->Send(data, bytes);
         if (strstr(std::string(data, bytes).c_str(), "shutdown")) {
-            server.Shutdown(id);
+            sess->Shutdown();
         }
         return bytes;
     });

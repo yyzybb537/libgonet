@@ -29,7 +29,7 @@ namespace tcp_detail {
     {
         auto this_ptr = this->shared_from_this();
         if (opt_.connect_cb_)
-            opt_.connect_cb_(GetId());
+            opt_.connect_cb_(GetSession());
 
         go [=] {
             auto holder = this_ptr;
@@ -71,7 +71,7 @@ namespace tcp_detail {
                     if(n > 0) {
 //                        printf("receive %u bytes: %s\n", (unsigned)n, to_hex(&recv_buf_[pos], n).c_str());
                         if (this->opt_.receive_cb_) {
-                            size_t consume = this->opt_.receive_cb_(GetId(), recv_buf_.data(), n + pos);
+                            size_t consume = this->opt_.receive_cb_(GetSession(), recv_buf_.data(), n + pos);
                             if (consume == (size_t)-1)
                                 ec = MakeNetworkErrorCode(eNetworkErrorCode::ec_data_parse_error);
                             else {
@@ -236,7 +236,7 @@ namespace tcp_detail {
         msg_send_list_.clear();
 
         if (this->opt_.disconnect_cb_)
-            this->opt_.disconnect_cb_(GetId(), close_ec_);
+            this->opt_.disconnect_cb_(GetSession(), close_ec_);
     }
 
     void TcpSession::Send(Buffer && buf, SndCb const& cb)
@@ -293,7 +293,16 @@ namespace tcp_detail {
         return !close_ec_;
     }
 
-    tcp_sess_id_t TcpSession::GetId()
+    endpoint TcpSession::LocalAddr()
+    {
+        return endpoint(local_addr_, proto_type::tcp);
+    }
+    endpoint TcpSession::RemoteAddr()
+    {
+        return endpoint(remote_addr_, proto_type::tcp);
+    }
+
+    TcpSessionEntry TcpSession::GetSession()
     {
         return this->shared_from_this();
     }
@@ -366,7 +375,7 @@ namespace tcp_detail {
                     continue;
                 }
                 else
-                    sessions_[sess->GetId()] = sess;
+                    sessions_[sess->GetSession()] = sess;
             }
 
             sess->SetSndTimeout(opt_.sndtimeo_)
@@ -377,7 +386,7 @@ namespace tcp_detail {
         }
     }
 
-    void TcpServerImpl::OnSessionClose(::network::SessionId id, boost_ec const& ec)
+    void TcpServerImpl::OnSessionClose(::network::SessionEntry id, boost_ec const& ec)
     {
         if (opt_.disconnect_cb_)
             opt_.disconnect_cb_(id, ec);
@@ -416,12 +425,12 @@ namespace tcp_detail {
             .goStart();
         return boost_ec();
     }
-    tcp_sess_id_t TcpClientImpl::GetSessId()
+    TcpSessionEntry TcpClientImpl::GetSession()
     {
-        return sess_ ? sess_->GetId() : tcp_sess_id_t();
+        return sess_ ? sess_->GetSession() : TcpSessionEntry();
     }
 
-    void TcpClientImpl::OnSessionClose(::network::SessionId id, boost_ec const& ec)
+    void TcpClientImpl::OnSessionClose(::network::SessionEntry id, boost_ec const& ec)
     {
         if (opt_.disconnect_cb_)
             opt_.disconnect_cb_(id, ec);
@@ -437,7 +446,7 @@ namespace tcp_detail {
 
     void TcpClient::Shutdown(bool immediately)
     {
-        auto sess = impl_->GetSessId();
+        auto sess = impl_->GetSession();
         if (sess)
             sess->Shutdown(immediately);
     }

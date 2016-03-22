@@ -3,6 +3,49 @@
 
 namespace network {
 
+    void FakeSession::Send(Buffer &&, const SndCb & cb)
+    {
+        if (cb) cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+    }
+    void FakeSession::Send(const void *, size_t, const SndCb & cb)
+    {
+        if (cb) cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+    }
+    bool FakeSession::IsEstab()
+    {
+        return false;
+    }
+    void FakeSession::Shutdown(bool)
+    {
+    }
+    network::endpoint FakeSession::LocalAddr()
+    {
+        return network::endpoint();
+    }
+    network::endpoint FakeSession::RemoteAddr()
+    {
+        return network::endpoint();
+    }
+
+    SessionEntry::SessionEntry(SessionImpl impl)
+        : impl_(impl)
+    {}
+
+    network::SessionBase* SessionEntry::operator->() const 
+    {
+        return GetPtr();
+    }
+
+    SessionBase* SessionEntry::GetPtr() const
+    {
+        if (!impl_) {
+            static FakeSession fake_sess;
+            return &fake_sess;
+        }
+
+        return impl_.get();
+    }
+
     char const* proto_type_s[] = {
         "unkown",
         "tcp",
