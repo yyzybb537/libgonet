@@ -37,6 +37,7 @@ struct _udp_sess_id_t : public ::network::SessionBase
     virtual void Shutdown(bool immediately = false) override;
     virtual endpoint LocalAddr() override;
     virtual endpoint RemoteAddr() override;
+    virtual std::size_t GetSendQueueSize() override;
 };
 typedef shared_ptr<_udp_sess_id_t> udp_sess_id_t;
 
@@ -70,7 +71,7 @@ private:
     std::atomic<bool> shutdown_{false};
     std::atomic<bool> init_{false};
     Buffer recv_buf_;
-    co_chan<void> recv_shutdown_channel_{1};
+    co::co_chan<void> recv_shutdown_channel_{1};
 };
 
 class UdpPoint

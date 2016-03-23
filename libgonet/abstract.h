@@ -85,12 +85,16 @@ namespace network {
     {
         virtual ~SessionBase() {}
 
+        // functional
         virtual void Send(Buffer && buf, SndCb const& cb = NULL) = 0;
         virtual void Send(const void* data, size_t bytes, SndCb const& cb = NULL) = 0;
         virtual bool IsEstab() = 0;
         virtual void Shutdown(bool immediately = false) = 0;
         virtual endpoint LocalAddr() = 0;
         virtual endpoint RemoteAddr() = 0;
+
+        // statistics
+        virtual std::size_t GetSendQueueSize() = 0;
     };
 
     struct FakeSession : public SessionBase
@@ -101,6 +105,7 @@ namespace network {
         virtual void Shutdown(bool immediately = false) override;
         virtual endpoint LocalAddr() override;
         virtual endpoint RemoteAddr() override;
+        virtual std::size_t GetSendQueueSize() override;
     };
 
     class SessionEntry
@@ -124,6 +129,10 @@ namespace network {
         SessionBase* operator->() const;
 
         friend bool operator<(SessionEntry const& lhs, SessionEntry const& rhs)
+        {
+            return lhs.GetPtr() < rhs.GetPtr();
+        }
+        friend bool operator==(SessionEntry const& lhs, SessionEntry const& rhs)
         {
             return lhs.GetPtr() < rhs.GetPtr();
         }

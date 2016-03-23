@@ -43,6 +43,10 @@ namespace udp_detail {
     {
         return endpoint(remote_addr, proto_type::udp);
     }
+    std::size_t _udp_sess_id_t::GetSendQueueSize()
+    {
+        return 0;
+    }
 
     UdpPointImpl::UdpPointImpl()
     {

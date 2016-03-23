@@ -50,7 +50,7 @@ public:
         Msg(uint64_t uid, SndCb ocb) : id(uid), cb(ocb) {}
         explicit Msg(shutdown_msg_t) : shutdown(true) {}
     };
-    typedef co_chan<boost::shared_ptr<Msg>> MsgChan;
+    typedef co::co_chan<boost::shared_ptr<Msg>> MsgChan;
     typedef std::list<boost::shared_ptr<Msg>> MsgList;
 
     explicit TcpSession(shared_ptr<tcp::socket> s, shared_ptr<LifeHolder> holder, uint32_t max_pack_size);
@@ -64,6 +64,7 @@ public:
     virtual bool IsEstab() override;
     virtual endpoint LocalAddr() override;
     virtual endpoint RemoteAddr() override;
+    virtual std::size_t GetSendQueueSize() override;
 
 private:
     void goReceive();

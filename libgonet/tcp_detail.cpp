@@ -301,6 +301,10 @@ namespace tcp_detail {
     {
         return endpoint(remote_addr_, proto_type::tcp);
     }
+    std::size_t TcpSession::GetSendQueueSize()
+    {
+        return msg_chan_.size();
+    }
 
     TcpSessionEntry TcpSession::GetSession()
     {
@@ -369,13 +373,16 @@ namespace tcp_detail {
             shared_ptr<TcpSession> sess(new TcpSession(s, this->shared_from_this(), opt_.max_pack_size_));
 
             {
-                std::lock_guard<co_mutex> lock(sessions_mutex_);
                 if (shutdown_) {
                     sess->Shutdown(true);
                     continue;
-                }
-                else
+                } else if (sessions_.size() >= opt_.max_connection_) {
+                    sess->Shutdown(true);
+                    continue;
+                } else {
+                    std::lock_guard<co_mutex> lock(sessions_mutex_);
                     sessions_[sess->GetSession()] = sess;
+                }
             }
 
             sess->SetSndTimeout(opt_.sndtimeo_)

@@ -1,12 +1,14 @@
 #pragma once
 #include "abstract.h"
+#include <limits>
 
 namespace network {
 
 struct OptionsUser
 {
     int sndtimeo_ = 0;
-    uint32_t max_pack_size_ = 4096;
+    uint32_t max_pack_size_ = 64 * 1024;
+    uint32_t max_connection_ = std::numeric_limits<uint32_t>::max();
 };
 
 struct OptionsData : public OptionsUser
@@ -77,11 +79,19 @@ struct OptionsBase
         for (auto o:lnks_)
             o->SetMaxPackSize(max_pack_size);
     }
+    void SetMaxConnection(uint32_t max_connection)
+    {
+        opt_.max_connection_ = max_connection;
+        OnSetMaxConnection();
+        for (auto o:lnks_)
+            o->SetMaxConnection(max_connection);
+    }
     virtual void OnSetConnectedCb() {}
     virtual void OnSetReceiveCb() {}
     virtual void OnSetDisconnectedCb() {}
     virtual void OnSetSndTimeout() {}
     virtual void OnSetMaxPackSize() {}
+    virtual void OnSetMaxConnection() {}
 };
 
 template <typename Drived>
@@ -115,6 +125,11 @@ struct Options : public OptionsBase
     Drived& SetMaxPackSize(uint32_t max_pack_size)
     {
         OptionsBase::SetMaxPackSize(max_pack_size);
+        return GetThisDrived();
+    }
+    Drived& SetMaxConnection(uint32_t max_connection)
+    {
+        OptionsBase::SetMaxConnection(max_connection);
         return GetThisDrived();
     }
 };

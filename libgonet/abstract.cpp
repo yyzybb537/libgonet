@@ -26,6 +26,10 @@ namespace network {
     {
         return network::endpoint();
     }
+    std::size_t FakeSession::GetSendQueueSize()
+    {
+        return 0;
+    }
 
     SessionEntry::SessionEntry(SessionImpl impl)
         : impl_(impl)
