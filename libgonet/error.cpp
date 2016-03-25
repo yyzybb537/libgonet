@@ -12,37 +12,37 @@ std::string network_error_category::message(int v) const
 {
     switch (v) {
         case (int)eNetworkErrorCode::ec_ok:
-            return "(networ)ok";
+            return "(network)ok";
 
         case (int)eNetworkErrorCode::ec_connecting:
-            return "(networ)client was connecting";
+            return "(network)client was connecting";
 
         case (int)eNetworkErrorCode::ec_estab:
-            return "(networ)client was ESTAB";
+            return "(network)client was ESTAB";
 
         case (int)eNetworkErrorCode::ec_shutdown:
-            return "(networ)user shutdown";
+            return "(network)user shutdown";
 
         case (int)eNetworkErrorCode::ec_half:
-            return "(networ)send or recv half of package";
+            return "(network)send or recv half of package";
 
         case (int)eNetworkErrorCode::ec_no_destition:
-            return "(networ)udp send must be appoint a destition address";
+            return "(network)udp send must be appoint a destition address";
 
         case (int)eNetworkErrorCode::ec_timeout:
-            return "(networ)time out";
+            return "(network)time out";
 
         case (int)eNetworkErrorCode::ec_url_parse_error:
-            return "(networ)url parse error";
+            return "(network)url parse error";
 
         case (int)eNetworkErrorCode::ec_data_parse_error:
-            return "(networ)data parse error";
+            return "(network)data parse error";
 
         case (int)eNetworkErrorCode::ec_unsupport_protocol:
-            return "(networ)unsupport protocol";
+            return "(network)unsupport protocol";
 
         case (int)eNetworkErrorCode::ec_recv_overflow:
-            return "(networ)recv buf overflow";
+            return "(network)recv buf overflow";
     }
 
     return "";

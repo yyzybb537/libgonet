@@ -27,13 +27,34 @@ struct OptionsData : public OptionsUser
 struct OptionsBase
 {
     OptionsData opt_;
-    std::list<OptionsBase*> lnks_;
+    std::vector<OptionsBase*> lnks_;
+    OptionsBase* parent_ = nullptr;
+
+    virtual ~OptionsBase()
+    {
+        if (parent_)
+            parent_->Unlink(this);
+
+        while (!lnks_.empty())
+            Unlink(lnks_.back());
+    }
 
     void Link(OptionsBase & other)
     {
         other.opt_ = this->opt_;
         lnks_.push_back(&other);
+        assert(nullptr == other.parent_);
+        other.parent_ = this;
         other.OnLink();
+    }
+
+    void Unlink(OptionsBase * other)
+    {
+        assert(other->parent_ == this);
+        other->parent_ = nullptr;
+        auto it = std::find(lnks_.begin(), lnks_.end(), other);
+        if (lnks_.end() != it)
+            lnks_.erase(it);
     }
 
     void OnLink()
