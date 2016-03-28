@@ -49,6 +49,7 @@ public:
 
         Msg(uint64_t uid, SndCb ocb) : id(uid), cb(ocb) {}
         explicit Msg(shutdown_msg_t) : shutdown(true) {}
+        void Done(boost_ec const& ec);
     };
     typedef co::co_chan<boost::shared_ptr<Msg>> MsgChan;
     typedef std::list<boost::shared_ptr<Msg>> MsgList;

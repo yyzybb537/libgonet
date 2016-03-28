@@ -11,6 +11,17 @@ namespace tcp_detail {
         return ios;
     }
 
+    void TcpSession::Msg::Done(boost_ec const& ec)
+    {
+        if (tid) {
+            co_timer_cancel(tid);
+            tid.reset();
+        }
+
+        if (cb)
+            cb(ec);
+    }
+
     TcpSession::TcpSession(shared_ptr<tcp::socket> s, shared_ptr<LifeHolder> holder, uint32_t max_pack_size)
         : socket_(s), holder_(holder), recv_buf_(max_pack_size), msg_chan_(-1)
     {
@@ -145,8 +156,7 @@ namespace tcp_detail {
                         ShutdownSend();
                         return ;
                     } else if (msg->timeout) {
-                        if (msg->cb)
-                            msg->cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_timeout));
+                        msg->Done(MakeNetworkErrorCode(eNetworkErrorCode::ec_timeout));
                     } else
                         msg_send_list_.push_back(msg);
                 }
@@ -159,8 +169,7 @@ namespace tcp_detail {
                 {
                     auto &msg = *it;
                     if (msg->timeout && !msg->send_half) {
-                        if (msg->cb)
-                            msg->cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_timeout));
+                        msg->Done(MakeNetworkErrorCode(eNetworkErrorCode::ec_timeout));
                         it = msg_send_list_.erase(it);
                         continue;
                     }
@@ -194,8 +203,7 @@ namespace tcp_detail {
                     auto &msg = *it;
                     std::size_t msg_capa = msg->buf.size() - msg->pos;
                     if (msg_capa <= n) {
-                        if (msg->cb)
-                            msg->cb(boost_ec());
+                        msg->Done(boost_ec());
                         it = msg_send_list_.erase(it);
                         n -= msg_capa;
                     } else if (msg_capa > n) {
@@ -226,13 +234,11 @@ namespace tcp_detail {
         for (;;) {
             boost::shared_ptr<Msg> msg;
             if (!msg_chan_.TryPop(msg)) break;
-            if (msg->cb)
-                msg->cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+            msg->Done(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
         }
 
         for (auto &msg : msg_send_list_)
-            if (msg->cb)
-                msg->cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+            msg->Done(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
         msg_send_list_.clear();
 
         if (this->opt_.disconnect_cb_)
@@ -264,11 +270,7 @@ namespace tcp_detail {
         }
 
         if (!msg_chan_.TryPush(msg)) {
-            if (msg->tid)
-                co_timer_cancel(msg->tid);
-
-            if (cb)
-                cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_send_overflow));
+            msg->Done(MakeNetworkErrorCode(eNetworkErrorCode::ec_send_overflow));
             return ;
         }
     }
