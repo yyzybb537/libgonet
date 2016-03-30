@@ -28,7 +28,11 @@ class network_error_category
     : public boost::system::error_category
 {
 public:
+#ifdef BOOST_SYSTEM_NOEXCEPT
     virtual const char* name() const BOOST_SYSTEM_NOEXCEPT;
+#else
+    virtual const char* name() const throw();
+#endif
 
     virtual std::string message(int) const;
 };

@@ -3,7 +3,11 @@
 namespace network
 {
 
+#ifdef BOOST_SYSTEM_NOEXCEPT
 const char* network_error_category::name() const BOOST_SYSTEM_NOEXCEPT
+#else
+const char* network_error_category::name() const throw()
+#endif
 {
     return "network_error";
 }
