@@ -1,14 +1,46 @@
 #pragma once
+#include "config.h"
 #include "abstract.h"
-#include <limits>
 
 namespace network {
+
+struct OptionSSL
+{
+#if ENABLE_SSL
+    enum class verify_mode_t
+    {
+        none,
+        optional,
+        required,
+    };
+
+    enum class ssl_version_t
+    {
+        sslv2 = ::boost::asio::ssl::context::sslv2,
+        sslv3 = ::boost::asio::ssl::context::sslv3,
+        tlsv1 = ::boost::asio::ssl::context::tlsv1,
+        sslv23 = ::boost::asio::ssl::context::sslv23,
+        tlsv11 = ::boost::asio::ssl::context::tlsv11,
+        tlsv12 = ::boost::asio::ssl::context::tlsv12,
+    };
+
+    ssl_version_t ssl_version = ssl_version_t::sslv23;
+    verify_mode_t verify_mode = verify_mode_t::none;
+    bool disable_compression = false;
+    boost::function<std::string(std::size_t, int)> pwd_callback;
+    std::string certificate_chain_file;
+    std::string private_key_file;
+    std::string tmp_dh_file;
+    std::string verify_file;
+#endif
+};
 
 struct OptionsUser
 {
     int sndtimeo_ = 0;
     uint32_t max_pack_size_ = 64 * 1024;
     uint32_t max_connection_ = std::numeric_limits<uint32_t>::max();
+    OptionSSL ssl_option_;
 };
 
 struct OptionsData : public OptionsUser
@@ -107,12 +139,20 @@ struct OptionsBase
         for (auto o:lnks_)
             o->SetMaxConnection(max_connection);
     }
+    void SetSSLOption(OptionSSL const& opt)
+    {
+        opt_.ssl_option_ = opt;
+        OnSetSSLOption();
+        for (auto o:lnks_)
+            o->SetSSLOption(opt);
+    }
     virtual void OnSetConnectedCb() {}
     virtual void OnSetReceiveCb() {}
     virtual void OnSetDisconnectedCb() {}
     virtual void OnSetSndTimeout() {}
     virtual void OnSetMaxPackSize() {}
     virtual void OnSetMaxConnection() {}
+    virtual void OnSetSSLOption() {}
 };
 
 template <typename Drived>
@@ -151,6 +191,11 @@ struct Options : public OptionsBase
     Drived& SetMaxConnection(uint32_t max_connection)
     {
         OptionsBase::SetMaxConnection(max_connection);
+        return GetThisDrived();
+    }
+    Drived& SetSSLOption(OptionSSL const& opt)
+    {
+        OptionsBase::SetSSLOption(opt);
         return GetThisDrived();
     }
 };

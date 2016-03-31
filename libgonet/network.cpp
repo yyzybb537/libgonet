@@ -1,6 +1,5 @@
 #include "network.h"
 #include "error.h"
-#include <signal.h>
 
 namespace network {
 
@@ -26,7 +25,7 @@ namespace network {
         *local_addr_ = endpoint::from_string(url, ec);
         if (ec) return ec;
 
-        if (local_addr_->proto_ == proto_type::tcp) {
+        if (local_addr_->proto_ == proto_type::tcp || local_addr_->proto_ == proto_type::ssl) {
             protocol_ = tcp::instance();
         } else if (local_addr_->proto_ == proto_type::udp) {
             protocol_ = udp::instance();
@@ -67,7 +66,7 @@ namespace network {
         *local_addr_ = endpoint::from_string(url, ec);
         if (ec) return ec;
 
-        if (local_addr_->proto_ == proto_type::tcp) {
+        if (local_addr_->proto_ == proto_type::tcp || local_addr_->proto_ == proto_type::ssl) {
             protocol_ = tcp::instance();
         } else if (local_addr_->proto_ == proto_type::udp) {
             protocol_ = udp::instance();

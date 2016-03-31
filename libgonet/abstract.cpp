@@ -1,5 +1,4 @@
 #include "abstract.h"
-#include <boost/regex.hpp>
 
 namespace network {
 
@@ -61,8 +60,8 @@ namespace network {
     char const* proto_type_s[] = {
         "unkown",
         "tcp",
+        "ssl",
         "udp",
-        "tls",
         "http",
         "https",
         "zk",
@@ -101,11 +100,10 @@ namespace network {
             case proto_type::unkown:
                 break;
             case proto_type::tcp:
+            case proto_type::ssl:
                 return ::boost::asio::ip::tcp::v4().type();
             case proto_type::udp:
                 return ::boost::asio::ip::udp::v4().type();
-            case proto_type::tls:
-                break;
             case proto_type::http:
                 return ::boost::asio::ip::tcp::v4().type();
             case proto_type::https:
@@ -122,11 +120,10 @@ namespace network {
             case proto_type::unkown:
                 break;
             case proto_type::tcp:
+            case proto_type::ssl:
                 return ::boost::asio::ip::tcp::v4().protocol();
             case proto_type::udp:
                 return ::boost::asio::ip::udp::v4().protocol();
-            case proto_type::tls:
-                break;
             case proto_type::http:
                 return ::boost::asio::ip::tcp::v4().protocol();
             case proto_type::https:

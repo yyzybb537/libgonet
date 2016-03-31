@@ -9,7 +9,16 @@ else()
     set(CMAKE_BUILD_TYPE RELEASE)
 endif()
 
+option(ENABLE_SSL "enable openssl" OFF)
+if (ENABLE_SSL)
+    set(ENABLE_SSL 1)
+else()
+    set(ENABLE_SSL 0)
+endif()
+configure_file(${PROJECT_SOURCE_DIR}/libgonet/cmake_config.h.in ${PROJECT_SOURCE_DIR}/libgonet/cmake_config.h)
+
 message("CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
+message("ENABLE_SSL: ${ENABLE_SSL}")
 
 set(CMAKE_CXX_FLAGS "-std=c++11 -Wall -Werror -fPIC -g -pg")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -pg ${CMAKE_CXX_FLAGS}")

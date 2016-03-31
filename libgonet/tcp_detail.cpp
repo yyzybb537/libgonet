@@ -23,12 +23,12 @@ namespace tcp_detail {
             cb(ec);
     }
 
-    TcpSession::TcpSession(shared_ptr<tcp::socket> s, shared_ptr<LifeHolder> holder, uint32_t max_pack_size)
+    TcpSession::TcpSession(shared_ptr<tcp_socket> s, shared_ptr<LifeHolder> holder, uint32_t max_pack_size)
         : socket_(s), holder_(holder), recv_buf_(max_pack_size), msg_chan_(-1)
     {
         boost_ec ignore_ec;
-        local_addr_ = s->local_endpoint(ignore_ec);
-        remote_addr_ = s->remote_endpoint(ignore_ec);
+        local_addr_ = s->native_socket().local_endpoint(ignore_ec);
+        remote_addr_ = s->native_socket().remote_endpoint(ignore_ec);
         sending_ = false;
     }
 
@@ -40,15 +40,12 @@ namespace tcp_detail {
 
     void TcpSession::goStart()
     {
-        auto this_ptr = this->shared_from_this();
-        go_dispatch(egod_robin) [this_ptr, this] {
-            co::initialize_socket_async_methods(socket_->native_handle());
-            if (opt_.connect_cb_)
-                opt_.connect_cb_(GetSession());
+        co::initialize_socket_async_methods(socket_->native_handle());
+        if (opt_.connect_cb_)
+            opt_.connect_cb_(GetSession());
 
-            goReceive();
-            goSend();
-        };
+        goReceive();
+        goSend();
     }
 
 //    static std::string to_hex(const char* data, size_t len)                     
@@ -112,19 +109,17 @@ namespace tcp_detail {
 
     void TcpSession::ShutdownSend()
     {
-        boost_ec ignore_ec;
-        socket_->shutdown(socket_base::shutdown_send, ignore_ec);
+        socket_->shutdown(socket_base::shutdown_send);
         send_shutdown_ = true;
         if (recv_shutdown_)
             OnClose();
         else
-            socket_->shutdown(socket_base::shutdown_receive, ignore_ec);
+            socket_->shutdown(socket_base::shutdown_receive);
     }
 
     void TcpSession::ShutdownRecv()
     {
-        boost_ec ignore_ec;
-        socket_->shutdown(socket_base::shutdown_receive, ignore_ec);
+        socket_->shutdown(socket_base::shutdown_receive);
         recv_shutdown_ = true;
         if (send_shutdown_)
             OnClose();
@@ -236,8 +231,7 @@ namespace tcp_detail {
 
         DebugPrint(dbg_session_alive, "TcpSession close %s:%d",
                 remote_addr_.address().to_string().c_str(), remote_addr_.port());
-        boost_ec ignore_ec;
-        socket_->close(ignore_ec);
+        socket_->close();
 
         for (;;) {
             boost::shared_ptr<Msg> msg;
@@ -264,6 +258,11 @@ namespace tcp_detail {
         if (recv_shutdown_ || send_shutdown_) {
             if (cb)
                 cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+            return ;
+        }
+
+        if (socket_->type() == tcp_socket_type_t::ssl) {
+            Send(std::move(buf), cb);
             return ;
         }
 
@@ -352,16 +351,13 @@ namespace tcp_detail {
     void TcpSession::Shutdown(bool immediately)
     {
         SetCloseEc(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
-        boost_ec ignore_ec;
-        socket_->shutdown(
-                immediately ? socket_base::shutdown_both : socket_base::shutdown_receive,
-                ignore_ec);
+        socket_->shutdown(immediately ? socket_base::shutdown_both : socket_base::shutdown_receive);
     }
     boost_ec TcpSession::SetSocketOptNoDelay(bool is_nodelay)
     {
         boost_ec ec;
         boost::asio::ip::tcp::no_delay opt_delay(is_nodelay);
-        socket_->set_option(opt_delay, ec);
+        socket_->native_socket().set_option(opt_delay, ec);
         return ec;
     }
 
@@ -372,11 +368,13 @@ namespace tcp_detail {
 
     endpoint TcpSession::LocalAddr()
     {
-        return endpoint(local_addr_, proto_type::tcp);
+        return endpoint(local_addr_, socket_->type() == tcp_socket_type_t::tcp ?
+                proto_type::tcp : proto_type::ssl);
     }
     endpoint TcpSession::RemoteAddr()
     {
-        return endpoint(remote_addr_, proto_type::tcp);
+        return endpoint(remote_addr_, socket_->type() == tcp_socket_type_t::tcp ?
+                proto_type::tcp : proto_type::ssl);
     }
     std::size_t TcpSession::GetSendQueueSize()
     {
@@ -392,7 +390,7 @@ namespace tcp_detail {
     {
         try {
             local_addr_ = addr;
-            acceptor_.reset(new tcp::acceptor(GetTcpIoService(), local_addr_, true));
+            acceptor_.reset(new tcp::acceptor(GetTcpIoService(), (tcp::endpoint)local_addr_, true));
         } catch (boost::system::system_error& e) {
             return e.code();
         }
@@ -423,11 +421,17 @@ namespace tcp_detail {
     }
     void TcpServerImpl::Accept()
     {
+        auto this_ptr = this->shared_from_this();
+        tcp_context ctx(tcp_socket::create_tcp_context(opt_.ssl_option_));
+
         for (;;)
         {
-            shared_ptr<tcp::socket> s(new tcp::socket(GetTcpIoService()));
+            shared_ptr<tcp_socket> s(new tcp_socket(GetTcpIoService(),
+                        local_addr_.proto_ == proto_type::tcp ? tcp_socket_type_t::tcp : tcp_socket_type_t::ssl,
+                        ctx));
+
             boost_ec ec;
-            acceptor_->accept(*s, ec);
+            acceptor_->accept(s->native_socket(), ec);
             if (ec) {
                 if (shutdown_) {
                     boost_ec ignore_ec;
@@ -443,29 +447,34 @@ namespace tcp_detail {
             }
 
             DebugPrint(dbg_accept_debug, "accept from %s:%d",
-                    s->remote_endpoint().address().to_string().c_str(),
-                    s->remote_endpoint().port());
+                    s->native_socket().remote_endpoint().address().to_string().c_str(),
+                    s->native_socket().remote_endpoint().port());
 
-            shared_ptr<TcpSession> sess(new TcpSession(s, this->shared_from_this(), opt_.max_pack_size_));
+            go_dispatch(egod_robin) [s, this_ptr, this] {
+                boost_ec ec = s->handshake(handshake_type_t::server);
+                if (ec) return ;
 
-            {
-                if (shutdown_) {
-                    sess->Shutdown(true);
-                    continue;
-                } else if (sessions_.size() >= opt_.max_connection_) {
-                    sess->Shutdown(true);
-                    continue;
-                } else {
-                    std::lock_guard<co_mutex> lock(sessions_mutex_);
-                    sessions_[sess->GetSession()] = sess;
+                shared_ptr<TcpSession> sess(new TcpSession(s, this->shared_from_this(), opt_.max_pack_size_));
+
+                {
+                    if (shutdown_) {
+                        sess->Shutdown(true);
+                        return;
+                    } else if (sessions_.size() >= opt_.max_connection_) {
+                        sess->Shutdown(true);
+                        return;
+                    } else {
+                        std::lock_guard<co_mutex> lock(sessions_mutex_);
+                        sessions_[sess->GetSession()] = sess;
+                    }
                 }
-            }
 
-            sess->SetSndTimeout(opt_.sndtimeo_)
-                .SetConnectedCb(opt_.connect_cb_)
-                .SetReceiveCb(opt_.receive_cb_)
-                .SetDisconnectedCb(boost::bind(&TcpServerImpl::OnSessionClose, this, _1, _2))
-                .goStart();
+                sess->SetSndTimeout(opt_.sndtimeo_)
+                    .SetConnectedCb(opt_.connect_cb_)
+                    .SetReceiveCb(opt_.receive_cb_)
+                    .SetDisconnectedCb(boost::bind(&TcpServerImpl::OnSessionClose, this, _1, _2))
+                    .goStart();
+            };
         }
     }
 
@@ -494,18 +503,27 @@ namespace tcp_detail {
         std::unique_lock<co_mutex> lock(connect_mtx_, std::defer_lock);
         if (!lock.try_lock()) return MakeNetworkErrorCode(eNetworkErrorCode::ec_connecting);
 
-        shared_ptr<tcp::socket> s(new tcp::socket(GetTcpIoService()));
+        tcp_context ctx(tcp_socket::create_tcp_context(opt_.ssl_option_));
+        shared_ptr<tcp_socket> s(new tcp_socket(GetTcpIoService(),
+                    addr.proto_ == proto_type::tcp ? tcp_socket_type_t::tcp : tcp_socket_type_t::ssl,
+                    ctx));
         boost_ec ec;
-        s->connect(addr, ec);
-        if (ec)
-            return ec;
+        s->native_socket().connect(addr, ec);
+        if (ec) return ec;
+
+        ec = s->handshake(handshake_type_t::client);
+        if (ec) return ec;
 
         sess_.reset(new TcpSession(s, this->shared_from_this(), opt_.max_pack_size_));
         sess_->SetSndTimeout(opt_.sndtimeo_)
             .SetConnectedCb(opt_.connect_cb_)
             .SetReceiveCb(opt_.receive_cb_)
-            .SetDisconnectedCb(boost::bind(&TcpClientImpl::OnSessionClose, this, _1, _2))
-            .goStart();
+            .SetDisconnectedCb(boost::bind(&TcpClientImpl::OnSessionClose, this, _1, _2));
+
+        auto sess = sess_;
+        go_dispatch(egod_robin) [sess] {
+            sess->goStart();
+        };
         return boost_ec();
     }
     TcpSessionEntry TcpClientImpl::GetSession()

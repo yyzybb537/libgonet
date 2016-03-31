@@ -1,6 +1,5 @@
 #include <iostream>
 #include <unistd.h>
-#include <libgo/coroutine.h>
 #include <boost/thread.hpp>
 #include <atomic>
 #include <libgonet/network.h>

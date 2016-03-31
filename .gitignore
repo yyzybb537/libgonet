@@ -2,3 +2,4 @@
 *.t
 *.a
 *.so
+libgonet/cmake_config.h

@@ -1,13 +1,6 @@
 #pragma once
 
-#include <string>
-#include <stdint.h>
-#include <atomic>
-#include <boost/asio.hpp>
-#include <boost/shared_ptr.hpp>
-#include <boost/smart_ptr/enable_shared_from_this.hpp>
-#include <boost/function.hpp>
-#include <libgo/coroutine.h>
+#include "config.h"
 #include "error.h"
 #include "abstract.h"
 #include "option.h"

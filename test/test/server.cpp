@@ -17,7 +17,13 @@ int main(int argc, char** argv)
         url = argv[1];
     }
 
+    OptionSSL ssl_opt;
+    ssl_opt.certificate_chain_file = "server.crt";
+    ssl_opt.private_key_file = "server.key";
+    ssl_opt.tmp_dh_file = "dh2048.pem";
+
     Server server;
+    server.SetSSLOption(ssl_opt);
     server.SetConnectedCb([&](SessionEntry sess){
         printf("connected from %s:%d\n", sess->RemoteAddr().address().to_string().c_str(), sess->RemoteAddr().port());
     }).SetDisconnectedCb([](SessionEntry, boost_ec const& ec) {
