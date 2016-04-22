@@ -136,9 +136,11 @@ namespace tcp_detail {
         auto this_ptr = this->shared_from_this();
         go [=]{
             auto holder = this_ptr;
+            std::vector<const_buffer> buffers;
+//            std::vector<iovec> buffers;
             for (;;)
             {
-                static const int c_multi = 1024;
+                static const int c_multi = std::min<int>(64, boost::asio::detail::max_iov_len);
 
                 int remain = c_multi - msg_send_list_.size();
                 for (int i = 0; i < remain; ++i)
@@ -162,7 +164,8 @@ namespace tcp_detail {
                 }
 
                 // Make buffers
-                std::vector<const_buffer> buffers(std::min<int>(msg_send_list_.size(), c_multi));
+                buffers.clear();
+                buffers.resize(std::min<int>(msg_send_list_.size(), c_multi));
                 int i = 0;
                 auto it = msg_send_list_.begin();
                 while (it != msg_send_list_.end())
@@ -176,6 +179,9 @@ namespace tcp_detail {
 
                     if (i >= c_multi) break;
                     buffers[i] = buffer(&msg->buf[msg->pos], msg->buf.size() - msg->pos);
+//                    buffers[i].iov_base = &msg->buf[msg->pos];
+//                    buffers[i].iov_len = msg->buf.size() - msg->pos;
+
                     ++it;
                     ++i;
                 }
@@ -187,6 +193,9 @@ namespace tcp_detail {
                 }
 
                 // Send Once
+//                ssize_t n = ::writev(socket_->native_handle(), buffers.data(), buffers.size());
+//                if (n == -1) {
+//                    SetCloseEc(boost_ec(errno, boost::system::system_category()));
                 boost_ec ec;
                 std::size_t n = socket_->write_some(buffers, ec);
                 if (ec) {
