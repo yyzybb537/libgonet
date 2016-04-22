@@ -77,6 +77,8 @@ void show_status()
     if (s_c++ % 10 == 0) {
         // print title
         printf("--------------------------------------------------------------------------------------------------------\n");
+        printf("-------------- start PackageSize=%d Bytes, Conn=%d, Pipeline=%d, RecvBuffer=%d KB --------------\n",
+                g_package, conn, pipeline, recv_buffer_length / 1024);
         printf(" index |  conn  |   s_send   | s_send_err |   s_recv   |   c_send   | c_send_err |   c_recv   |   QPS   | max_pack | Ops\n");
     }
 
@@ -138,10 +140,6 @@ co_main(int argc, char** argv)
 
     if (argc > 4)
         recv_buffer_length = atoi(argv[4]) * 1024;
-
-    printf("start PackageSize=%d Bytes, Conn=%d, Pipeline=%d, RecvBuffer=%d KB.\n",
-            g_package, conn, pipeline, recv_buffer_length / 1024);
-
 
     for (int i = 0; i < conn; ++i)
         go [&]{ start_client(g_url); };

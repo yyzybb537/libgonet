@@ -27,4 +27,6 @@ set(CMAKE_INSTALL_PREFIX "/usr/local")
 install(TARGETS ${TARGET} LIBRARY DESTINATION "lib" ARCHIVE DESTINATION "lib")
 install(DIRECTORY libgonet/ DESTINATION "include/libgonet" FILES_MATCHING PATTERN "*.h")
 
-add_subdirectory("third_party/libgo")
+if (NOT NO_SUB)
+    add_subdirectory("third_party/libgo")
+endif()
