@@ -11,7 +11,6 @@ using namespace network;
 #define MB / (1024 * 1024)
 
 std::string g_url = "tcp://127.0.0.1:3050";
-int g_thread_count = 2;
 std::atomic<int> g_conn{0};
 std::atomic<unsigned long long> g_server_send{0};
 std::atomic<unsigned long long> g_server_send_err{0};
@@ -26,6 +25,7 @@ int recv_buffer_length = 160 * 1024;
 int g_package = 64;
 int g_max_pack = 0;
 bool g_nodelay_flag = false;
+int g_thread_count = 1;
 
 void start_server(std::string url)
 {
@@ -88,8 +88,8 @@ void show_status()
     if (s_c++ % 10 == 0) {
         // print title
         printf("--------------------------------------------------------------------------------------------------------\n");
-        printf("------------------ start PackageSize=%d Bytes, RecvBuffer=%d KB ------------------\n",
-                g_package, recv_buffer_length / 1024);
+        printf("------------------ start PackageSize=%d Bytes, NoDelay=%d, RecvBuffer=%d KB, Threads=%d ------------------\n",
+                g_package, g_nodelay_flag, recv_buffer_length / 1024, g_thread_count);
         printf(" index |  conn  |   s_send   | s_send_err |   s_recv   |   c_send   | c_send_err |   c_recv   |   QPS   | max_pack\n");
     }
 
@@ -126,16 +126,16 @@ void show_status()
     co_timer_add(std::chrono::seconds(1), [=]{ show_status(); });
 }
 
-co_main(int argc, char** argv)
+int main(int argc, char** argv)
 {
 //    co_sched.GetOptions().debug = network::dbg_session_alive;
 //    co_sched.GetOptions().enable_coro_stat = true;
 //    co_sched.GetOptions().debug = network::dbg_session_alive | co::dbg_hook;
 
     if (argc > 1 && argv[1] == std::string("-h")) {
-        printf("Usage %s [PackageSize] [NoDelay] [recv_buffer_length(KB)]\n\n", argv[0]);
-        printf("Defaults [PackageSize=%d] [NoDelay=%d] [recv_buffer_length=%d(KB)]\n\n",
-                g_package, g_nodelay_flag, recv_buffer_length / 1024);
+        printf("Usage %s [PackageSize] [NoDelay] [recv_buffer_length(KB)] [Threads]\n\n", argv[0]);
+        printf("Defaults [PackageSize=%d] [NoDelay=%d] [recv_buffer_length=%d(KB)] [Threads=%d]\n\n",
+                g_package, g_nodelay_flag, recv_buffer_length / 1024, g_thread_count);
         return 1;
     }
 
@@ -149,8 +149,15 @@ co_main(int argc, char** argv)
     if (argc > 3)
         recv_buffer_length = atoi(argv[3]) * 1024;
 
+    if (argc > 4)
+        g_thread_count = atoi(argv[4]);
+
     go [&]{ start_server(g_url); };
     co_timer_add(std::chrono::milliseconds(100), [=]{ show_status(); });
+    boost::thread_group tg;
+    for (int i = 0; i < g_thread_count; ++i)
+        tg.create_thread([]{ co_sched.RunLoop(); });
+    tg.join_all();
     return 0;
 }
 
