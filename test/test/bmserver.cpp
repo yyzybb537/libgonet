@@ -25,6 +25,7 @@ const int test_seconds = 4;
 int recv_buffer_length = 160 * 1024;
 int g_package = 64;
 int g_max_pack = 0;
+bool g_nodelay_flag = false;
 
 void start_server(std::string url)
 {
@@ -51,16 +52,26 @@ void start_server(std::string url)
                     size_t pos = 0;
                     while (pos < bytes) {
                         size_t n = std::min<size_t>(g_package, bytes - pos);
-                        sess->Send((char*)data + pos, n, [&, n](boost_ec ec){
-                            if (ec) g_server_send_err += n;
-                            else g_server_send += n;
-                            });
+                        if (g_nodelay_flag) {
+                            sess->SendNoDelay((char*)data + pos, n, [&, n](boost_ec ec){
+                                    if (ec) g_server_send_err += n;
+                                    else g_server_send += n;
+                                    });
+                        } else {
+                            sess->Send((char*)data + pos, n, [&, n](boost_ec ec){
+                                    if (ec) g_server_send_err += n;
+                                    else g_server_send += n;
+                                    });
+                        }
                         pos += n;
                     }
 
                     return bytes;
                 });
-    s.SetConnectedCb([&](SessionEntry) { ++g_conn; });
+    s.SetConnectedCb([&](SessionEntry sess) {
+            ++g_conn;
+            sess->SetSocketOptNoDelay(g_nodelay_flag);
+            });
 
     boost_ec ec = s.goStart(url);
     if (ec) {
@@ -122,7 +133,9 @@ co_main(int argc, char** argv)
 //    co_sched.GetOptions().debug = network::dbg_session_alive | co::dbg_hook;
 
     if (argc > 1 && argv[1] == std::string("-h")) {
-        printf("Usage %s [PackageSize] [recv_buffer_length(KB)]\n\n", argv[0]);
+        printf("Usage %s [PackageSize] [NoDelay] [recv_buffer_length(KB)]\n\n", argv[0]);
+        printf("Defaults [PackageSize=%d] [NoDelay=%d] [recv_buffer_length=%d(KB)]\n\n",
+                g_package, g_nodelay_flag, recv_buffer_length / 1024);
         return 1;
     }
 
@@ -131,7 +144,10 @@ co_main(int argc, char** argv)
     }
 
     if (argc > 2)
-        recv_buffer_length = atoi(argv[2]) * 1024;
+        g_nodelay_flag = !!atoi(argv[2]);
+
+    if (argc > 3)
+        recv_buffer_length = atoi(argv[3]) * 1024;
 
     go [&]{ start_server(g_url); };
     co_timer_add(std::chrono::milliseconds(100), [=]{ show_status(); });

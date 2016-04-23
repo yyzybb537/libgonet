@@ -59,9 +59,12 @@ public:
     void goStart();
     TcpSessionEntry GetSession();
 
+    virtual void SendNoDelay(Buffer && buf, SndCb const& cb = NULL) override;
+    virtual void SendNoDelay(const void* data, size_t bytes, SndCb const& cb = NULL) override;
     virtual void Send(Buffer && buf, SndCb const& cb = NULL) override;
     virtual void Send(const void* data, size_t bytes, SndCb const& cb = NULL) override;
     virtual void Shutdown(bool immediately = false) override;
+    virtual boost_ec SetSocketOptNoDelay(bool is_nodelay) override;
     virtual bool IsEstab() override;
     virtual endpoint LocalAddr() override;
     virtual endpoint RemoteAddr() override;
@@ -82,6 +85,8 @@ private:
     uint64_t msg_id_;
     MsgChan msg_chan_;
     MsgList msg_send_list_;
+    co::LFLock send_mtx_;
+    bool sending_;
     co_mutex close_ec_mutex_;
     boost_ec close_ec_;
 

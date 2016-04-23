@@ -3,6 +3,14 @@
 
 namespace network {
 
+    void FakeSession::SendNoDelay(Buffer &&, const SndCb & cb)
+    {
+        if (cb) cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+    }
+    void FakeSession::SendNoDelay(const void *, size_t, const SndCb & cb)
+    {
+        if (cb) cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+    }
     void FakeSession::Send(Buffer &&, const SndCb & cb)
     {
         if (cb) cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));

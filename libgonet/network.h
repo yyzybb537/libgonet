@@ -32,6 +32,8 @@ namespace network
         //    tcp://127.0.0.1:3030
         //    udp://127.0.0.1:3030
         boost_ec Connect(std::string const& url);
+        void SendNoDelay(Buffer && buf, SndCb const& cb = NULL);
+        void SendNoDelay(const void* data, size_t bytes, SndCb const& cb = NULL);
         void Send(Buffer && buf, SndCb const& cb = NULL);
         void Send(const void* data, size_t bytes, SndCb const& cb = NULL);
         void Shutdown();

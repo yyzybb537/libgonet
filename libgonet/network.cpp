@@ -63,6 +63,26 @@ namespace network {
         this->Link(*impl_->GetOptions());
         return impl_->Connect(*local_addr_);
     }
+    void Client::SendNoDelay(Buffer && buf, SndCb const& cb)
+    {
+        if (!impl_) {
+            if (cb)
+                cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+            return ;
+        }
+
+        impl_->GetSession()->SendNoDelay(std::move(buf), cb);
+    }
+    void Client::SendNoDelay(const void* data, size_t bytes, SndCb const& cb)
+    {
+        if (!impl_) {
+            if (cb)
+                cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+            return ;
+        }
+
+        impl_->GetSession()->SendNoDelay(data, bytes, cb);
+    }
     void Client::Send(Buffer && buf, SndCb const& cb)
     {
         if (!impl_) {

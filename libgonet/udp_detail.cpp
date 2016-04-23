@@ -4,6 +4,14 @@
 namespace network {
 namespace udp_detail {
 
+    void _udp_sess_id_t::SendNoDelay(Buffer && buf, SndCb const& cb)
+    {
+        Send(std::move(buf), cb);
+    }
+    void _udp_sess_id_t::SendNoDelay(const void* data, size_t bytes, SndCb const& cb)
+    {
+        Send(data, bytes, cb);
+    }
     void _udp_sess_id_t::Send(Buffer && buf, const SndCb & cb)
     {
         if (!udp_point) {

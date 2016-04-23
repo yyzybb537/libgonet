@@ -1,6 +1,7 @@
 #include "tcp_detail.h"
 #include <chrono>
 #include <boost/bind.hpp>
+#include "linux_glibc_hook.h"
 
 namespace network {
 namespace tcp_detail {
@@ -28,6 +29,7 @@ namespace tcp_detail {
         boost_ec ignore_ec;
         local_addr_ = s->local_endpoint(ignore_ec);
         remote_addr_ = s->remote_endpoint(ignore_ec);
+        sending_ = false;
     }
 
     TcpSession::~TcpSession()
@@ -42,12 +44,9 @@ namespace tcp_detail {
         if (opt_.connect_cb_)
             opt_.connect_cb_(GetSession());
 
-        go [=] {
-            auto holder = this_ptr;
-            goReceive();
-            goSend();
-        };
-
+        goReceive();
+        goSend();
+        co::initialize_socket_async_methods(socket_->native_handle());
     }
 
 //    static std::string to_hex(const char* data, size_t len)                     
@@ -136,11 +135,11 @@ namespace tcp_detail {
         auto this_ptr = this->shared_from_this();
         go [=]{
             auto holder = this_ptr;
+            const int c_multi = std::min<int>(64, boost::asio::detail::max_iov_len);
             std::vector<const_buffer> buffers;
-//            std::vector<iovec> buffers;
             for (;;)
             {
-                static const int c_multi = std::min<int>(64, boost::asio::detail::max_iov_len);
+                std::unique_lock<co::LFLock> send_token(send_mtx_);
 
                 int remain = c_multi - msg_send_list_.size();
                 for (int i = 0; i < remain; ++i)
@@ -148,7 +147,10 @@ namespace tcp_detail {
                     boost::shared_ptr<Msg> msg;
                     if (!msg_chan_.TryPop(msg)) {
                         if (msg_send_list_.empty()) {
+                            sending_ = false;
+                            send_token.unlock();
                             msg_chan_ >> msg;
+                            send_token.lock();
                         } else {
                             break;
                         }
@@ -179,8 +181,6 @@ namespace tcp_detail {
 
                     if (i >= c_multi) break;
                     buffers[i] = buffer(&msg->buf[msg->pos], msg->buf.size() - msg->pos);
-//                    buffers[i].iov_base = &msg->buf[msg->pos];
-//                    buffers[i].iov_len = msg->buf.size() - msg->pos;
 
                     ++it;
                     ++i;
@@ -193,9 +193,6 @@ namespace tcp_detail {
                 }
 
                 // Send Once
-//                ssize_t n = ::writev(socket_->native_handle(), buffers.data(), buffers.size());
-//                if (n == -1) {
-//                    SetCloseEc(boost_ec(errno, boost::system::system_category()));
                 boost_ec ec;
                 std::size_t n = socket_->write_some(buffers, ec);
                 if (ec) {
@@ -254,6 +251,67 @@ namespace tcp_detail {
             this->opt_.disconnect_cb_(GetSession(), close_ec_);
     }
 
+    void TcpSession::SendNoDelay(Buffer && buf, SndCb const& cb)
+    {
+        if (buf.empty()) {
+            if (cb)
+                cb(boost_ec());
+            return ;
+        }
+
+        if (recv_shutdown_ || send_shutdown_) {
+            if (cb)
+                cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+            return ;
+        }
+
+        std::unique_lock<co::LFLock> send_token(send_mtx_, std::defer_lock);
+        if (!send_token.try_lock()) {
+            Send(std::move(buf), cb);
+            return ;
+        }
+
+        if (sending_) {
+            Send(std::move(buf), cb);
+            return ;
+        }
+
+        ssize_t written = ::write_f(socket_->native_handle(), buf.data(), buf.size());
+        if (written <= 0) {
+            // send error.
+            send_token.unlock();
+            Send(std::move(buf), cb);
+            return ;
+        } else if (written >= (ssize_t)buf.size()) {
+            // all bytes sended.
+            send_token.unlock();
+            if (cb)
+                cb(boost_ec());
+            return ;
+        } else {
+            // half sended, locked still.
+            auto msg = boost::make_shared<Msg>(++msg_id_, cb);
+            msg->buf.swap(buf);
+            msg->pos = written;
+            msg->send_half = true;
+            if (opt_.sndtimeo_) {
+                msg->tid = co_timer_add(std::chrono::milliseconds(opt_.sndtimeo_),
+                        [=]{
+                            msg->timeout = true;
+                        });
+            }
+            // 放到队列头
+            msg_send_list_.push_front(msg);
+            sending_ = true;
+        }
+    }
+    void TcpSession::SendNoDelay(const void* data, size_t bytes, SndCb const& cb)
+    {
+        Buffer buf(bytes);
+        memcpy(&buf[0], data, bytes);
+        SendNoDelay(std::move(buf), cb);
+    }
+
     void TcpSession::Send(Buffer && buf, SndCb const& cb)
     {
         if (buf.empty()) {
@@ -271,7 +329,6 @@ namespace tcp_detail {
         auto msg = boost::make_shared<Msg>(++msg_id_, cb);
         msg->buf.swap(buf);
         if (opt_.sndtimeo_) {
-            auto this_ptr = this->shared_from_this();
             msg->tid = co_timer_add(std::chrono::milliseconds(opt_.sndtimeo_),
                     [=]{
                         msg->timeout = true;
@@ -297,6 +354,13 @@ namespace tcp_detail {
         socket_->shutdown(
                 immediately ? socket_base::shutdown_both : socket_base::shutdown_receive,
                 ignore_ec);
+    }
+    boost_ec TcpSession::SetSocketOptNoDelay(bool is_nodelay)
+    {
+        boost_ec ec;
+        boost::asio::ip::tcp::no_delay opt_delay(is_nodelay);
+        socket_->set_option(opt_delay, ec);
+        return ec;
     }
 
     bool TcpSession::IsEstab()

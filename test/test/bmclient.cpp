@@ -27,12 +27,16 @@ int g_package = 64;
 char *g_data = new char[g_package];
 int pipeline = 1000;
 int conn = 1;
+bool g_nodelay_flag = false;
 
 void start_client(std::string url)
 {
     Client c;
     c.SetMaxPackSize(recv_buffer_length);
-    c.SetConnectedCb([&](SessionEntry){ ++g_conn; })
+    c.SetConnectedCb([&](SessionEntry sess){
+            ++g_conn;
+            sess->SetSocketOptNoDelay(g_nodelay_flag);
+            })
         .SetReceiveCb(
             [&](SessionEntry sess, const void* data, size_t bytes)
             {
@@ -42,10 +46,17 @@ void start_client(std::string url)
                 size_t pos = 0;
                 while (pos < bytes) {
                     size_t n = std::min<size_t>(g_package, bytes - pos);
-                    sess->Send((char*)data + pos, n, [&, n](boost_ec ec){
-                        if (ec) g_client_send_err += n;
-                        else g_client_send += n;
-                        });
+                    if (g_nodelay_flag) {
+                        sess->SendNoDelay((char*)data + pos, n, [&, n](boost_ec ec){
+                            if (ec) g_client_send_err += n;
+                            else g_client_send += n;
+                            });
+                    } else {
+                        sess->Send((char*)data + pos, n, [&, n](boost_ec ec){
+                            if (ec) g_client_send_err += n;
+                            else g_client_send += n;
+                            });
+                    }
                     pos += n;
                 }
 
@@ -122,7 +133,9 @@ co_main(int argc, char** argv)
 //    co_sched.GetOptions().debug = network::dbg_session_alive | co::dbg_hook;
 
     if (argc > 1 && argv[1] == std::string("-h")) {
-        printf("Usage %s [PackageSize] [Conn] [Pipeline] [recv_buffer_length(KB)]\n\n", argv[0]);
+        printf("Usage %s [PackageSize] [Conn] [Pipeline] [NoDelay] [recv_buffer_length(KB)]\n\n", argv[0]);
+        printf("Defaults [PackageSize=%d] [Conn=%d] [Pipeline=%d] [NoDelay=%d] [recv_buffer_length=%d(KB)]\n\n",
+                g_package, conn, pipeline, g_nodelay_flag, recv_buffer_length / 1024);
         return 1;
     }
 
@@ -139,7 +152,10 @@ co_main(int argc, char** argv)
         pipeline = atoi(argv[3]);
 
     if (argc > 4)
-        recv_buffer_length = atoi(argv[4]) * 1024;
+        g_nodelay_flag = !!atoi(argv[4]);
+
+    if (argc > 5)
+        recv_buffer_length = atoi(argv[5]) * 1024;
 
     for (int i = 0; i < conn; ++i)
         go [&]{ start_client(g_url); };

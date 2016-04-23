@@ -86,10 +86,13 @@ namespace network {
         virtual ~SessionBase() {}
 
         // functional
+        virtual void SendNoDelay(Buffer && buf, SndCb const& cb = NULL) = 0;
+        virtual void SendNoDelay(const void* data, size_t bytes, SndCb const& cb = NULL) = 0;
         virtual void Send(Buffer && buf, SndCb const& cb = NULL) = 0;
         virtual void Send(const void* data, size_t bytes, SndCb const& cb = NULL) = 0;
         virtual bool IsEstab() = 0;
         virtual void Shutdown(bool immediately = false) = 0;
+        virtual boost_ec SetSocketOptNoDelay(bool is_nodelay) { return boost_ec(); }
         virtual endpoint LocalAddr() = 0;
         virtual endpoint RemoteAddr() = 0;
 
@@ -99,6 +102,8 @@ namespace network {
 
     struct FakeSession : public SessionBase
     {
+        virtual void SendNoDelay(Buffer && buf, SndCb const& cb = NULL) override;
+        virtual void SendNoDelay(const void* data, size_t bytes, SndCb const& cb = NULL) override;
         virtual void Send(Buffer && buf, SndCb const& cb = NULL) override;
         virtual void Send(const void* data, size_t bytes, SndCb const& cb = NULL) override;
         virtual bool IsEstab() override;

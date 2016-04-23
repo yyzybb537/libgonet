@@ -31,6 +31,8 @@ struct _udp_sess_id_t : public ::network::SessionBase
         : udp_point(point), remote_addr(addr)
     {}
 
+    virtual void SendNoDelay(Buffer && buf, SndCb const& cb = NULL) override;
+    virtual void SendNoDelay(const void* data, size_t bytes, SndCb const& cb = NULL) override;
     virtual void Send(Buffer && buf, SndCb const& cb = NULL) override;
     virtual void Send(const void* data, size_t bytes, SndCb const& cb = NULL) override;
     virtual bool IsEstab() override;
@@ -49,9 +51,9 @@ public:
 
     boost_ec goStart(endpoint addr);
     void Shutdown();
+    boost_ec Connect(endpoint addr);
     boost_ec Send(std::string const& host, uint16_t port, const void* data, std::size_t bytes);
     boost_ec Send(udp::endpoint destition, const void* data, std::size_t bytes);
-    boost_ec Connect(endpoint addr);
     boost_ec Send(const void* data, size_t bytes);
     udp::endpoint LocalAddr();
     udp::endpoint RemoteAddr();
