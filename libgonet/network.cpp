@@ -1,11 +1,25 @@
 #include "network.h"
 #include "error.h"
+#include <signal.h>
 
 namespace network {
 
+    static int __sigignore_pipe()
+    {
+        return sigignore(SIGPIPE);
+    }
+
+    static void sigignore_pipe()
+    {
+        static int v = __sigignore_pipe();
+        (void)v;
+    }
+
     Server::Server()
         : local_addr_(new endpoint)
-    {}
+    {
+        sigignore_pipe();
+    }
     boost_ec Server::goStart(std::string const& url)
     {
         boost_ec ec;
@@ -40,7 +54,9 @@ namespace network {
 
     Client::Client()
         : connect_mtx_(new co_mutex), local_addr_(new endpoint)
-    {}
+    {
+        sigignore_pipe();
+    }
     boost_ec Client::Connect(std::string const& url)
     {
         std::unique_lock<co_mutex> lock(*connect_mtx_, std::defer_lock);
