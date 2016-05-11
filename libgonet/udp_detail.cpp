@@ -81,7 +81,7 @@ namespace udp_detail {
         local_addr_ = local_endpoint;
         init_ = true;
         auto this_ptr = this->shared_from_this();
-        go [this_ptr] {
+        go_dispatch(egod_robin) [this_ptr] {
             this_ptr->DoRecv();
         };
         return boost_ec();

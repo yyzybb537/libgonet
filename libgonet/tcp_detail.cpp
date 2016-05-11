@@ -41,12 +41,14 @@ namespace tcp_detail {
     void TcpSession::goStart()
     {
         auto this_ptr = this->shared_from_this();
-        if (opt_.connect_cb_)
-            opt_.connect_cb_(GetSession());
+        go_dispatch(egod_robin) [this_ptr, this] {
+            co::initialize_socket_async_methods(socket_->native_handle());
+            if (opt_.connect_cb_)
+                opt_.connect_cb_(GetSession());
 
-        goReceive();
-        goSend();
-        co::initialize_socket_async_methods(socket_->native_handle());
+            goReceive();
+            goSend();
+        };
     }
 
 //    static std::string to_hex(const char* data, size_t len)                     
@@ -64,7 +66,7 @@ namespace tcp_detail {
     void TcpSession::goReceive()
     {
         auto this_ptr = this->shared_from_this();
-        go [=]{
+        go_dispatch(egod_local_thread) [=]{
             auto holder = this_ptr;
             size_t pos = 0;
             for (;;)
@@ -133,7 +135,7 @@ namespace tcp_detail {
     void TcpSession::goSend()
     {
         auto this_ptr = this->shared_from_this();
-        go [=]{
+        go_dispatch(egod_local_thread) [=]{
             auto holder = this_ptr;
             const int c_multi = std::min<int>(64, boost::asio::detail::max_iov_len);
             std::vector<const_buffer> buffers;
@@ -391,13 +393,12 @@ namespace tcp_detail {
         try {
             local_addr_ = addr;
             acceptor_.reset(new tcp::acceptor(GetTcpIoService(), local_addr_, true));
-        } catch (boost::system::system_error& e)
-        {
+        } catch (boost::system::system_error& e) {
             return e.code();
         }
 
         auto this_ptr = this->shared_from_this();
-        go [this_ptr] {
+        go_dispatch(egod_robin) [this_ptr] {
             this_ptr->Accept();
         };
         return boost_ec();

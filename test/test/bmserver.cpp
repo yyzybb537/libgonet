@@ -131,6 +131,7 @@ int main(int argc, char** argv)
 //    co_sched.GetOptions().debug = network::dbg_session_alive;
 //    co_sched.GetOptions().enable_coro_stat = true;
 //    co_sched.GetOptions().debug = network::dbg_session_alive | co::dbg_hook;
+    co_sched.GetOptions().enable_work_steal = false;
 
     if (argc > 1 && argv[1] == std::string("-h")) {
         printf("Usage %s [PackageSize] [NoDelay] [recv_buffer_length(KB)] [Threads]\n\n", argv[0]);
