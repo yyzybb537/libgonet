@@ -83,9 +83,17 @@ public:
         Shutdown();
     }
 
-    boost_ec goStart(endpoint addr)
+    boost_ec goStart(endpoint addr) override
     {
         return impl_->goStart(addr);
+    }
+    boost_ec goStartBeforeFork(endpoint addr) override
+    {
+        return impl_->goStart(addr);
+    }
+    void goStartAfterFork() override
+    {
+        // nothing to do.
     }
     void Shutdown()
     {

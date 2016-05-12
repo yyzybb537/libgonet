@@ -157,6 +157,8 @@ namespace network {
         virtual boost_ec goStart(endpoint addr) = 0;
         virtual void Shutdown() = 0;
         virtual OptionsBase* GetOptions() = 0;
+        virtual boost_ec goStartBeforeFork(endpoint addr) = 0;
+        virtual void goStartAfterFork() {}
     };
     struct ClientBase
     {

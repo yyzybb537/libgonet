@@ -386,7 +386,7 @@ namespace tcp_detail {
         return this->shared_from_this();
     }
 
-    boost_ec TcpServerImpl::goStart(endpoint addr)
+    boost_ec TcpServerImpl::goStartBeforeFork(endpoint addr)
     {
         try {
             local_addr_ = addr;
@@ -398,12 +398,23 @@ namespace tcp_detail {
         } catch (boost::system::system_error& e) {
             return e.code();
         }
-
+        return boost_ec();
+    }
+    void TcpServerImpl::goStartAfterFork()
+    {
         auto this_ptr = this->shared_from_this();
         go_dispatch(egod_robin) [this_ptr] {
             this_ptr->Accept();
         };
-        return boost_ec();
+    }
+
+    boost_ec TcpServerImpl::goStart(endpoint addr)
+    {
+        boost_ec ec = goStartBeforeFork(addr);
+        if (ec) return ec;
+
+        goStartAfterFork();
+        return ec;
     }
     void TcpServerImpl::ShutdownAll()
     {

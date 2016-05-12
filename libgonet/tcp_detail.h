@@ -95,6 +95,9 @@ class TcpServerImpl
 public:
     typedef std::map<::network::SessionEntry, shared_ptr<TcpSession>> Sessions;
 
+    boost_ec goStartBeforeFork(endpoint addr);
+    void goStartAfterFork();
+
     boost_ec goStart(endpoint addr);
     void ShutdownAll();
     void Shutdown();
@@ -128,7 +131,15 @@ public:
         Shutdown();
     }
 
-    boost_ec goStart(endpoint addr)
+    boost_ec goStartBeforeFork(endpoint addr) override
+    {
+        return impl_->goStartBeforeFork(addr);
+    }
+    void goStartAfterFork() override
+    {
+        impl_->goStartAfterFork();
+    }
+    boost_ec goStart(endpoint addr) override
     {
         return impl_->goStart(addr);
     }
@@ -138,7 +149,7 @@ public:
         impl_->ShutdownAll();
     }
 
-    void Shutdown()
+    void Shutdown() override
     {
         impl_->Shutdown();
     }
@@ -148,7 +159,7 @@ public:
         return impl_->LocalAddr();
     }
 
-    OptionsBase* GetOptions()
+    OptionsBase* GetOptions() override
     {
         return this;
     }

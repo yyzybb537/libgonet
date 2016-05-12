@@ -19,6 +19,28 @@ namespace network {
     {
         sigignore_pipe();
     }
+    boost_ec Server::goStartBeforeFork(std::string const& url)
+    {
+        boost_ec ec;
+        *local_addr_ = endpoint::from_string(url, ec);
+        if (ec) return ec;
+
+        if (local_addr_->proto_ == proto_type::tcp || local_addr_->proto_ == proto_type::ssl) {
+            protocol_ = tcp::instance();
+        } else if (local_addr_->proto_ == proto_type::udp) {
+            protocol_ = udp::instance();
+        } else {
+            return MakeNetworkErrorCode(eNetworkErrorCode::ec_unsupport_protocol);
+        }
+
+        impl_ = protocol_->CreateServer();
+        this->Link(*impl_->GetOptions());
+        return impl_->goStartBeforeFork(*local_addr_);
+    }
+    void Server::goStartAfterFork()
+    {
+        impl_->goStartAfterFork();
+    }
     boost_ec Server::goStart(std::string const& url)
     {
         boost_ec ec;

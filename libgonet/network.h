@@ -19,6 +19,9 @@ namespace network
         void Shutdown();
         Protocol const& GetProtocol();
 
+        boost_ec goStartBeforeFork(std::string const& url);
+        void goStartAfterFork();
+
     private:
         Protocol* protocol_ = nullptr;
         boost::shared_ptr<ServerBase> impl_;
