@@ -1,6 +1,5 @@
 #include <iostream>
 #include <unistd.h>
-#include <libgo/coroutine.h>
 #include <boost/thread.hpp>
 #include <atomic>
 #include <libgonet/network.h>
@@ -30,6 +29,16 @@ int g_thread_count = 1;
 void start_server(std::string url)
 {
     Server s;
+
+#if ENABLE_SSL
+    OptionSSL ssl_opt;
+    ssl_opt.certificate_chain_file = "server.crt";
+    ssl_opt.private_key_file = "server.key";
+    ssl_opt.tmp_dh_file = "dh2048.pem";
+    s.SetSSLOption(ssl_opt);
+#endif
+
+    s.SetListenBacklog(1024);
     s.SetMaxPackSize(recv_buffer_length);
     s.SetDisconnectedCb([&](SessionEntry, boost_ec const&){
                 --g_conn;
@@ -88,8 +97,8 @@ void show_status()
     if (s_c++ % 10 == 0) {
         // print title
         printf("--------------------------------------------------------------------------------------------------------\n");
-        printf("------------------ start PackageSize=%d Bytes, NoDelay=%d, RecvBuffer=%d KB, Threads=%d ------------------\n",
-                g_package, g_nodelay_flag, recv_buffer_length / 1024, g_thread_count);
+        printf("------------- start PackageSize=%d Bytes, NoDelay=%d, RecvBuffer=%d KB, Threads=%d URL=%s -------------\n",
+                g_package, g_nodelay_flag, recv_buffer_length / 1024, g_thread_count, g_url.c_str());
         printf(" index |  conn  |   s_send   | s_send_err |   s_recv   |   c_send   | c_send_err |   c_recv   |   QPS   | max_pack\n");
     }
 
@@ -134,9 +143,9 @@ int main(int argc, char** argv)
     co_sched.GetOptions().enable_work_steal = false;
 
     if (argc > 1 && argv[1] == std::string("-h")) {
-        printf("Usage %s [PackageSize] [NoDelay] [recv_buffer_length(KB)] [Threads]\n\n", argv[0]);
-        printf("Defaults [PackageSize=%d] [NoDelay=%d] [recv_buffer_length=%d(KB)] [Threads=%d]\n\n",
-                g_package, g_nodelay_flag, recv_buffer_length / 1024, g_thread_count);
+        printf("Usage %s [PackageSize] [NoDelay] [recv_buffer_length(KB)] [Threads] [URL]\n\n", argv[0]);
+        printf("Defaults [PackageSize=%d] [NoDelay=%d] [recv_buffer_length=%d(KB)] [Threads=%d] [URL=%s]\n\n",
+                g_package, g_nodelay_flag, recv_buffer_length / 1024, g_thread_count, g_url.c_str());
         return 1;
     }
 
@@ -152,6 +161,9 @@ int main(int argc, char** argv)
 
     if (argc > 4)
         g_thread_count = atoi(argv[4]);
+
+    if (argc > 5)
+        g_url = argv[5];
 
     go [&]{ start_server(g_url); };
     co_timer_add(std::chrono::milliseconds(100), [=]{ show_status(); });

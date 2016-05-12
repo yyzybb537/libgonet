@@ -1,9 +1,6 @@
 #pragma once
-#include <boost/shared_ptr.hpp>
-#include <boost/asio.hpp>
-#include <boost/function.hpp>
+#include "config.h"
 #include "error.h"
-#include <libgo/coroutine.h>
 
 namespace network {
 
@@ -15,8 +12,8 @@ namespace network {
     enum class proto_type {
         unkown,
         tcp,
+        ssl,
         udp,
-        tls,
         http,
         https,
         zk,
@@ -98,6 +95,12 @@ namespace network {
 
         // statistics
         virtual std::size_t GetSendQueueSize() = 0;
+
+        // storage
+        boost::any & Storage() { return storage_; }
+
+    private:
+        boost::any storage_;
     };
 
     struct FakeSession : public SessionBase

@@ -1,7 +1,5 @@
 #pragma once
-#include <boost/system/error_code.hpp>
-#include <boost/system/system_error.hpp>
-#include <string>
+#include "config.h"
 
 namespace network
 {

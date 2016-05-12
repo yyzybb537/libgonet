@@ -1,4 +1,5 @@
 #include "error.h"
+#include "option.h"
 
 namespace network
 {

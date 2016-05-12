@@ -1,6 +1,5 @@
 #include <iostream>
 #include <unistd.h>
-#include <libgo/coroutine.h>
 #include <boost/thread.hpp>
 #include <atomic>
 #include <libgonet/network.h>
@@ -32,6 +31,15 @@ int g_thread_count = 1;
 void start_client(std::string url)
 {
     Client c;
+
+#if ENABLE_SSL
+    OptionSSL ssl_opt;
+    ssl_opt.certificate_chain_file = "server.crt";
+    ssl_opt.private_key_file = "server.key";
+    ssl_opt.tmp_dh_file = "dh2048.pem";
+    c.SetSSLOption(ssl_opt);
+#endif
+
     c.SetMaxPackSize(recv_buffer_length);
     c.SetConnectedCb([&](SessionEntry sess){
             ++g_conn;
@@ -88,8 +96,8 @@ void show_status()
     if (s_c++ % 10 == 0) {
         // print title
         printf("--------------------------------------------------------------------------------------------------------\n");
-        printf("---------- start PackageSize=%d Bytes, Conn=%d, Pipeline=%d, NoDelay=%d, RecvBuffer=%d KB, Threads=%d ----------\n",
-                g_package, conn, pipeline, g_nodelay_flag, recv_buffer_length / 1024, g_thread_count);
+        printf("------ start PackageSize=%d Bytes, Conn=%d, Pipeline=%d, NoDelay=%d, RecvBuffer=%d KB, Threads=%d URL=%s -----\n",
+                g_package, conn, pipeline, g_nodelay_flag, recv_buffer_length / 1024, g_thread_count, g_url.c_str());
         printf(" index |  conn  |   s_send   | s_send_err |   s_recv   |   c_send   | c_send_err |   c_recv   |   QPS   | max_pack | Ops\n");
     }
 
@@ -134,9 +142,9 @@ int main(int argc, char** argv)
     co_sched.GetOptions().enable_work_steal = false;
 
     if (argc > 1 && argv[1] == std::string("-h")) {
-        printf("Usage %s [PackageSize] [Conn] [Pipeline] [NoDelay] [recv_buffer_length(KB)] [Threads]\n\n", argv[0]);
-        printf("Defaults [PackageSize=%d] [Conn=%d] [Pipeline=%d] [NoDelay=%d] [recv_buffer_length=%d(KB)] [Threads=%d]\n\n",
-                g_package, conn, pipeline, g_nodelay_flag, recv_buffer_length / 1024, g_thread_count);
+        printf("Usage %s [PackageSize] [Conn] [Pipeline] [NoDelay] [recv_buffer_length(KB)] [Threads] [URL]\n\n", argv[0]);
+        printf("Defaults [PackageSize=%d] [Conn=%d] [Pipeline=%d] [NoDelay=%d] [recv_buffer_length=%d(KB)] [Threads=%d] [URL=%s]\n\n",
+                g_package, conn, pipeline, g_nodelay_flag, recv_buffer_length / 1024, g_thread_count, g_url.c_str());
         return 1;
     }
 
@@ -160,6 +168,9 @@ int main(int argc, char** argv)
 
     if (argc > 6)
         g_thread_count = atoi(argv[6]);
+
+    if (argc > 7)
+        g_url = argv[7];
 
     for (int i = 0; i < conn; ++i)
         go [&]{ start_client(g_url); };

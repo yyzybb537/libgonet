@@ -1,19 +1,10 @@
 #pragma once
 
-#include <string>
-#include <stdint.h>
-#include <atomic>
-#include <boost/asio.hpp>
-#include <boost/shared_ptr.hpp>
-#include <boost/make_shared.hpp>
-#include <boost/smart_ptr/enable_shared_from_this.hpp>
-#include <boost/intrusive/list.hpp>
-#include <boost/variant.hpp>
-#include <boost/function.hpp>
-#include <libgo/coroutine.h>
+#include "config.h"
 #include "error.h"
 #include "abstract.h"
 #include "option.h"
+#include "tcp_socket.h"
 
 namespace network {
 namespace tcp_detail {
@@ -54,7 +45,7 @@ public:
     typedef co::co_chan<boost::shared_ptr<Msg>> MsgChan;
     typedef std::list<boost::shared_ptr<Msg>> MsgList;
 
-    explicit TcpSession(shared_ptr<tcp::socket> s, shared_ptr<LifeHolder> holder, uint32_t max_pack_size);
+    explicit TcpSession(shared_ptr<tcp_socket> s, shared_ptr<LifeHolder> holder, uint32_t max_pack_size);
     ~TcpSession();
     void goStart();
     TcpSessionEntry GetSession();
@@ -79,7 +70,7 @@ private:
     void ShutdownRecv();
 
 private:
-    shared_ptr<tcp::socket> socket_;
+    shared_ptr<tcp_socket> socket_;
     shared_ptr<LifeHolder> holder_;
     Buffer recv_buf_;
     uint64_t msg_id_;
@@ -116,8 +107,7 @@ private:
 
 private:
     shared_ptr<tcp::acceptor> acceptor_;
-    tcp::endpoint local_addr_;
-    shared_ptr<tcp::socket> socket_;
+    endpoint local_addr_;
     co_mutex sessions_mutex_;
     Sessions sessions_;
     std::atomic<bool> shutdown_{false};
