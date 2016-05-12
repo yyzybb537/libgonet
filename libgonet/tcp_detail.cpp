@@ -445,8 +445,17 @@ namespace tcp_detail {
                         local_addr_.proto_ == proto_type::tcp ? tcp_socket_type_t::tcp : tcp_socket_type_t::ssl,
                         ctx));
 
+            // aspect before accept
+            if (opt_.accept_aspect_.before_aspect)
+                opt_.accept_aspect_.before_aspect();
+
             boost_ec ec;
             acceptor_->accept(s->native_socket(), ec);
+
+            // aspect after accept
+            if (opt_.accept_aspect_.after_aspect)
+                opt_.accept_aspect_.after_aspect();
+
             if (ec) {
                 if (shutdown_) {
                     boost_ec ignore_ec;

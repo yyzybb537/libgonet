@@ -1,9 +1,17 @@
 #include <iostream>
 #include <unistd.h>
+#include <boost/thread.hpp>
 #include <libgonet/network.h>
+
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <string.h>
+#include <errno.h>
 using namespace std;
 using namespace co;
 using namespace network;
+
 
 int main(int argc, char** argv)
 {
@@ -20,6 +28,46 @@ int main(int argc, char** argv)
     }
 
     Server server;
+
+    int sem_id = semget(IPC_PRIVATE, 1, IPC_CREAT | 0666);
+    if (sem_id == -1) {
+        perror("semget returns -1. error:");
+        return 0;
+    }
+
+    union {
+        int val;
+        struct semid_ds *buf;
+        unsigned short *array;
+        struct seminfo  *__buf;
+    } sem_v;
+    sem_v.val = 1;
+    if (-1 == semctl(sem_id, 0, SETVAL, sem_v)) {
+        perror("semctl calls error:");
+        return 0;
+    }
+
+    OptionsAcceptAspect aop_accept;
+    aop_accept.before_aspect = [sem_id] {
+        co_await(void) [sem_id]{
+            sembuf sb;
+            sb.sem_num = 0;
+            sb.sem_op = -1;
+            sb.sem_flg = 0;
+            printf("[%d] call semop\n", getpid());
+            semop(sem_id, &sb, 1);
+        };
+        printf("[%d] enter accept.\n", getpid());
+    };
+    aop_accept.after_aspect = [sem_id] {
+        printf("[%d] exit accept.\n", getpid());
+        sembuf sb;
+        sb.sem_num = 0;
+        sb.sem_op = 1;
+        sb.sem_flg = 0;
+        semop(sem_id, &sb, 1);
+    };
+    server.SetAcceptAspect(aop_accept);
 
 #if ENABLE_SSL
     OptionSSL ssl_opt;
@@ -50,7 +98,11 @@ int main(int argc, char** argv)
     }
 
     for (int i = 0; i < childs; ++i)
-        fork();
+        if (!fork())
+            break;
+
+    // thread must create after fork.
+    boost::thread th([]{ co_sched.GetThreadPool().RunLoop(); });
 
     server.goStartAfterFork();
 
