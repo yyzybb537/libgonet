@@ -390,7 +390,11 @@ namespace tcp_detail {
     {
         try {
             local_addr_ = addr;
-            acceptor_.reset(new tcp::acceptor(GetTcpIoService(), (tcp::endpoint)local_addr_, true));
+            acceptor_.reset(new tcp::acceptor(GetTcpIoService()));
+            acceptor_->open(tcp::endpoint(local_addr_).protocol());
+            acceptor_->set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+            acceptor_->bind(local_addr_);
+            acceptor_->listen(opt_.listen_backlog_);
         } catch (boost::system::system_error& e) {
             return e.code();
         }

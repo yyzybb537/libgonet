@@ -37,6 +37,7 @@ struct OptionSSL
 
 struct OptionsUser
 {
+    int listen_backlog_ = ::boost::asio::ip::tcp::socket::max_connections;
     int sndtimeo_ = 0;
     uint32_t max_pack_size_ = 64 * 1024;
     uint32_t max_connection_ = std::numeric_limits<uint32_t>::max();
@@ -118,6 +119,13 @@ struct OptionsBase
         for (auto o:lnks_)
             o->SetDisconnectedCb(cb);
     }
+    void SetListenBacklog(int listen_backlog)
+    {
+        opt_.listen_backlog_ = listen_backlog;
+        OnSetListenBacklog();
+        for (auto o:lnks_)
+            o->SetListenBacklog(listen_backlog);
+    }
     void SetSndTimeout(int sndtimeo)
     {
         opt_.sndtimeo_ = sndtimeo;
@@ -149,6 +157,7 @@ struct OptionsBase
     virtual void OnSetConnectedCb() {}
     virtual void OnSetReceiveCb() {}
     virtual void OnSetDisconnectedCb() {}
+    virtual void OnSetListenBacklog() {}
     virtual void OnSetSndTimeout() {}
     virtual void OnSetMaxPackSize() {}
     virtual void OnSetMaxConnection() {}
@@ -176,6 +185,11 @@ struct Options : public OptionsBase
     Drived& SetDisconnectedCb(DisconnectedCb cb)
     {
         OptionsBase::SetDisconnectedCb(cb);
+        return GetThisDrived();
+    }
+    Drived& SetListenBacklog(int listen_backlog)
+    {
+        OptionsBase::SetListenBacklog(listen_backlog);
         return GetThisDrived();
     }
     Drived& SetSndTimeout(int sndtimeo)

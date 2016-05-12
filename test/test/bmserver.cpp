@@ -38,6 +38,7 @@ void start_server(std::string url)
     s.SetSSLOption(ssl_opt);
 #endif
 
+    s.SetListenBacklog(1024);
     s.SetMaxPackSize(recv_buffer_length);
     s.SetDisconnectedCb([&](SessionEntry, boost_ec const&){
                 --g_conn;
