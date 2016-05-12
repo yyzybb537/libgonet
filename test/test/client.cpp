@@ -13,13 +13,16 @@ void on_disconnect(SessionEntry sess, boost_ec const& ec)
 
 void foo(std::string url)
 {
+    Client client;
+
+#if ENABLE_SSL
     OptionSSL ssl_opt;
     ssl_opt.certificate_chain_file = "server.crt";
     ssl_opt.private_key_file = "server.key";
     ssl_opt.tmp_dh_file = "dh2048.pem";
-
-    Client client;
     client.SetSSLOption(ssl_opt);
+#endif
+
     client.SetConnectedCb([&](SessionEntry sess){
         printf("connected.\n");
         go [&] {
