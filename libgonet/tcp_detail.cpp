@@ -25,9 +25,9 @@ namespace tcp_detail {
 
     TcpSession::TcpSession(shared_ptr<tcp_socket> s, shared_ptr<LifeHolder> holder, OptionsData & opt)
         : socket_(s), holder_(holder), recv_buf_(opt.max_pack_size_),
-        max_pack_size_shrink_(std::max(opt.max_pack_size_shrink_, opt.max_pack_size_)),
-        max_pack_size_hard_(std::max(opt.max_pack_size_hard_, opt.max_pack_size_)),
-        msg_chan_(-1)
+        max_pack_size_shrink_((std::max)(opt.max_pack_size_shrink_, opt.max_pack_size_)),
+        max_pack_size_hard_((std::max)(opt.max_pack_size_hard_, opt.max_pack_size_)),
+        msg_chan_((std::size_t)-1)
     {
         boost_ec ignore_ec;
         local_addr_ = s->native_socket().local_endpoint(ignore_ec);
