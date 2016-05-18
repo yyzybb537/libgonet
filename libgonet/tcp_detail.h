@@ -45,7 +45,8 @@ public:
     typedef co::co_chan<boost::shared_ptr<Msg>> MsgChan;
     typedef std::list<boost::shared_ptr<Msg>> MsgList;
 
-    explicit TcpSession(shared_ptr<tcp_socket> s, shared_ptr<LifeHolder> holder, uint32_t max_pack_size);
+    explicit TcpSession(shared_ptr<tcp_socket> s, shared_ptr<LifeHolder> holder,
+            OptionsData & opt);
     ~TcpSession();
     void goStart();
     TcpSessionEntry GetSession();
@@ -73,6 +74,8 @@ private:
     shared_ptr<tcp_socket> socket_;
     shared_ptr<LifeHolder> holder_;
     Buffer recv_buf_;
+    uint32_t & max_pack_size_shrink_;
+    uint32_t & max_pack_size_hard_;
     uint64_t msg_id_;
     MsgChan msg_chan_;
     MsgList msg_send_list_;

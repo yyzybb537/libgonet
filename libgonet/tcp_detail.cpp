@@ -23,8 +23,11 @@ namespace tcp_detail {
             cb(ec);
     }
 
-    TcpSession::TcpSession(shared_ptr<tcp_socket> s, shared_ptr<LifeHolder> holder, uint32_t max_pack_size)
-        : socket_(s), holder_(holder), recv_buf_(max_pack_size), msg_chan_(-1)
+    TcpSession::TcpSession(shared_ptr<tcp_socket> s, shared_ptr<LifeHolder> holder, OptionsData & opt)
+        : socket_(s), holder_(holder), recv_buf_(opt.max_pack_size_),
+        max_pack_size_shrink_(std::max(opt.max_pack_size_shrink_, opt.max_pack_size_)),
+        max_pack_size_hard_(std::max(opt.max_pack_size_hard_, opt.max_pack_size_)),
+        msg_chan_(-1)
     {
         boost_ec ignore_ec;
         local_addr_ = s->native_socket().local_endpoint(ignore_ec);
@@ -71,10 +74,16 @@ namespace tcp_detail {
                 boost_ec ec;
                 std::size_t n = 0;
                 if (pos >= recv_buf_.size()) {
-                    ec = MakeNetworkErrorCode(eNetworkErrorCode::ec_recv_overflow);
-                } else {
-                    n = socket_->read_some(buffer(&recv_buf_[pos], recv_buf_.size() - pos), ec);
+                    if (recv_buf_.size() >= max_pack_size_hard_)
+                        ec = MakeNetworkErrorCode(eNetworkErrorCode::ec_recv_overflow);
+                    else {
+                        // extand capacity
+                        recv_buf_.resize((std::min<uint32_t>)(recv_buf_.size() * 2, max_pack_size_hard_));
+                    }
                 }
+
+                if (!ec)
+                    n = socket_->read_some(buffer(&recv_buf_[pos], recv_buf_.size() - pos), ec);
 
                 if (!ec) {
                     if(n > 0) {
@@ -88,6 +97,13 @@ namespace tcp_detail {
                                 pos = n + pos - consume;
                                 if (pos > 0)
                                     memcpy(&recv_buf_[0], &recv_buf_[consume], pos);
+
+                                if (recv_buf_.size() >= max_pack_size_shrink_ + max_pack_size_shrink_ / 2 &&
+                                        pos <= max_pack_size_shrink_ / 2) {
+                                    // shrink capacity
+                                    recv_buf_.resize(max_pack_size_shrink_);
+                                    recv_buf_.shrink_to_fit();
+                                }
                             }
                         } else {
                             pos += n;
@@ -478,7 +494,7 @@ namespace tcp_detail {
                 boost_ec ec = s->handshake(handshake_type_t::server);
                 if (ec) return ;
 
-                shared_ptr<TcpSession> sess(new TcpSession(s, this->shared_from_this(), opt_.max_pack_size_));
+                shared_ptr<TcpSession> sess(new TcpSession(s, this->shared_from_this(), opt_));
 
                 {
                     if (shutdown_) {
@@ -538,7 +554,7 @@ namespace tcp_detail {
         ec = s->handshake(handshake_type_t::client);
         if (ec) return ec;
 
-        sess_.reset(new TcpSession(s, this->shared_from_this(), opt_.max_pack_size_));
+        sess_.reset(new TcpSession(s, this->shared_from_this(), opt_));
         sess_->SetSndTimeout(opt_.sndtimeo_)
             .SetConnectedCb(opt_.connect_cb_)
             .SetReceiveCb(opt_.receive_cb_)

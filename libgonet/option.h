@@ -47,6 +47,8 @@ struct OptionsUser
     int listen_backlog_ = ::boost::asio::ip::tcp::socket::max_connections;
     int sndtimeo_ = 0;
     uint32_t max_pack_size_ = 64 * 1024;
+    uint32_t max_pack_size_shrink_ = 1024 * 1024;
+    uint32_t max_pack_size_hard_ = 4 * 1024 * 1024;
     uint32_t max_connection_ = std::numeric_limits<uint32_t>::max();
     OptionSSL ssl_option_;
     OptionsAcceptAspect accept_aspect_;
@@ -148,6 +150,20 @@ struct OptionsBase
         for (auto o:lnks_)
             o->SetMaxPackSize(max_pack_size);
     }
+    void SetMaxPackSizeShrink(uint32_t max_pack_size_shrink)
+    {
+        opt_.max_pack_size_shrink_ = max_pack_size_shrink;
+        OnSetMaxPackSizeShrink();
+        for (auto o:lnks_)
+            o->SetMaxPackSizeShrink(max_pack_size_shrink);
+    }
+    void SetMaxPackSizeHard(uint32_t max_pack_size_hard)
+    {
+        opt_.max_pack_size_hard_ = max_pack_size_hard;
+        OnSetMaxPackSizeHard();
+        for (auto o:lnks_)
+            o->SetMaxPackSizeHard(max_pack_size_hard);
+    }
     void SetMaxConnection(uint32_t max_connection)
     {
         opt_.max_connection_ = max_connection;
@@ -175,6 +191,8 @@ struct OptionsBase
     virtual void OnSetListenBacklog() {}
     virtual void OnSetSndTimeout() {}
     virtual void OnSetMaxPackSize() {}
+    virtual void OnSetMaxPackSizeHard() {}
+    virtual void OnSetMaxPackSizeShrink() {}
     virtual void OnSetMaxConnection() {}
     virtual void OnSetSSLOption() {}
     virtual void OnSetAcceptAspect() {}
@@ -216,6 +234,16 @@ struct Options : public OptionsBase
     Drived& SetMaxPackSize(uint32_t max_pack_size)
     {
         OptionsBase::SetMaxPackSize(max_pack_size);
+        return GetThisDrived();
+    }
+    Drived& SetMaxPackSizeShrink(uint32_t max_pack_size_shrink)
+    {
+        OptionsBase::SetMaxPackSizeShrink(max_pack_size_shrink);
+        return GetThisDrived();
+    }
+    Drived& SetMaxPackSizeHard(uint32_t max_pack_size_hard)
+    {
+        OptionsBase::SetMaxPackSizeHard(max_pack_size_hard);
         return GetThisDrived();
     }
     Drived& SetMaxConnection(uint32_t max_connection)
