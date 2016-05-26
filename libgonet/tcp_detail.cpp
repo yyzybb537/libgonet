@@ -23,15 +23,17 @@ namespace tcp_detail {
             cb(ec);
     }
 
-    TcpSession::TcpSession(shared_ptr<tcp_socket> s, shared_ptr<LifeHolder> holder, OptionsData & opt)
+    TcpSession::TcpSession(shared_ptr<tcp_socket> s,
+            shared_ptr<LifeHolder> holder, OptionsData & opt,
+            endpoint::ext_t const& endpoint_ext)
         : socket_(s), holder_(holder), recv_buf_(opt.max_pack_size_),
         max_pack_size_shrink_((std::max)(opt.max_pack_size_shrink_, opt.max_pack_size_)),
         max_pack_size_hard_((std::max)(opt.max_pack_size_hard_, opt.max_pack_size_)),
         msg_chan_((std::size_t)-1)
     {
         boost_ec ignore_ec;
-        local_addr_ = s->native_socket().local_endpoint(ignore_ec);
-        remote_addr_ = s->native_socket().remote_endpoint(ignore_ec);
+        local_addr_ = endpoint(s->native_socket().local_endpoint(ignore_ec), endpoint_ext);
+        remote_addr_ = endpoint(s->native_socket().remote_endpoint(ignore_ec), endpoint_ext);
         sending_ = false;
     }
 
@@ -384,13 +386,11 @@ namespace tcp_detail {
 
     endpoint TcpSession::LocalAddr()
     {
-        return endpoint(local_addr_, socket_->type() == tcp_socket_type_t::tcp ?
-                proto_type::tcp : proto_type::ssl);
+        return local_addr_;
     }
     endpoint TcpSession::RemoteAddr()
     {
-        return endpoint(remote_addr_, socket_->type() == tcp_socket_type_t::tcp ?
-                proto_type::tcp : proto_type::ssl);
+        return remote_addr_;
     }
     std::size_t TcpSession::GetSendQueueSize()
     {
@@ -405,12 +405,12 @@ namespace tcp_detail {
     boost_ec TcpServerImpl::goStartBeforeFork(endpoint addr)
     {
         try {
-            local_addr_ = addr;
             acceptor_.reset(new tcp::acceptor(GetTcpIoService()));
-            acceptor_->open(tcp::endpoint(local_addr_).protocol());
+            acceptor_->open(tcp::endpoint(addr).protocol());
             acceptor_->set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
-            acceptor_->bind(local_addr_);
+            acceptor_->bind(addr);
             acceptor_->listen(opt_.listen_backlog_);
+            local_addr_ = endpoint(acceptor_->local_endpoint(), addr.ext());
         } catch (boost::system::system_error& e) {
             return e.code();
         }
@@ -458,7 +458,7 @@ namespace tcp_detail {
         for (;;)
         {
             shared_ptr<tcp_socket> s(new tcp_socket(GetTcpIoService(),
-                        local_addr_.proto_ == proto_type::tcp ? tcp_socket_type_t::tcp : tcp_socket_type_t::ssl,
+                        local_addr_.proto() == proto_type::tcp ? tcp_socket_type_t::tcp : tcp_socket_type_t::ssl,
                         ctx));
 
             // aspect before accept
@@ -494,7 +494,7 @@ namespace tcp_detail {
                 boost_ec ec = s->handshake(handshake_type_t::server);
                 if (ec) return ;
 
-                shared_ptr<TcpSession> sess(new TcpSession(s, this->shared_from_this(), opt_));
+                shared_ptr<TcpSession> sess(new TcpSession(s, this->shared_from_this(), opt_, local_addr_.ext()));
 
                 {
                     if (shutdown_) {
@@ -527,7 +527,7 @@ namespace tcp_detail {
         sessions_.erase(id);
     }
 
-    tcp::endpoint TcpServerImpl::LocalAddr()
+    endpoint TcpServerImpl::LocalAddr()
     {
         return local_addr_;
     }
@@ -545,7 +545,7 @@ namespace tcp_detail {
 
         tcp_context ctx(tcp_socket::create_tcp_context(opt_.ssl_option_));
         shared_ptr<tcp_socket> s(new tcp_socket(GetTcpIoService(),
-                    addr.proto_ == proto_type::tcp ? tcp_socket_type_t::tcp : tcp_socket_type_t::ssl,
+                    addr.proto() == proto_type::tcp ? tcp_socket_type_t::tcp : tcp_socket_type_t::ssl,
                     ctx));
         boost_ec ec;
         s->native_socket().connect(addr, ec);
@@ -554,7 +554,7 @@ namespace tcp_detail {
         ec = s->handshake(handshake_type_t::client);
         if (ec) return ec;
 
-        sess_.reset(new TcpSession(s, this->shared_from_this(), opt_));
+        sess_.reset(new TcpSession(s, this->shared_from_this(), opt_, addr.ext()));
         sess_->SetSndTimeout(opt_.sndtimeo_)
             .SetConnectedCb(opt_.connect_cb_)
             .SetReceiveCb(opt_.receive_cb_)

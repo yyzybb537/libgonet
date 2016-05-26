@@ -22,7 +22,9 @@ io_service& GetTcpIoService();
 
 class TcpServerImpl;
 class TcpSession
-    : public Options<TcpSession>, public boost::enable_shared_from_this<TcpSession>, public SessionBase
+    : public Options<TcpSession>,
+    public boost::enable_shared_from_this<TcpSession>,
+    public SessionBase
 {
 public:
     struct Msg
@@ -46,7 +48,7 @@ public:
     typedef std::list<boost::shared_ptr<Msg>> MsgList;
 
     explicit TcpSession(shared_ptr<tcp_socket> s, shared_ptr<LifeHolder> holder,
-            OptionsData & opt);
+            OptionsData & opt, endpoint::ext_t const& endpoint_ext);
     ~TcpSession();
     void goStart();
     TcpSessionEntry GetSession();
@@ -88,8 +90,8 @@ private:
     std::atomic<bool> recv_shutdown_{false};
     co_mutex closed_;
 
-    tcp::endpoint local_addr_;
-    tcp::endpoint remote_addr_;
+    endpoint local_addr_;
+    endpoint remote_addr_;
 };
 
 class TcpServerImpl
@@ -104,7 +106,7 @@ public:
     boost_ec goStart(endpoint addr);
     void ShutdownAll();
     void Shutdown();
-    tcp::endpoint LocalAddr();
+    endpoint LocalAddr();
     std::size_t SessionCount();
 
 private:
@@ -157,7 +159,7 @@ public:
         impl_->Shutdown();
     }
 
-    tcp::endpoint LocalAddr()
+    endpoint LocalAddr()
     {
         return impl_->LocalAddr();
     }

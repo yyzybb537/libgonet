@@ -141,15 +141,15 @@ namespace network {
     std::string Protocol::endpoint::to_string(boost_ec & ec) const
     {
         std::string url;
-        if (proto_ != proto_type::unkown) {
-            url += proto2str(proto_) + "://";
+        if (proto() != proto_type::unkown) {
+            url += proto2str(proto()) + "://";
         }
         url += address().to_string(ec);
         if (ec) return "";
 
         url += ":";
         url += std::to_string(port());
-        url += path_;
+        url += path();
         return url;
     }
 
@@ -171,8 +171,8 @@ namespace network {
         endpoint ep(::boost::asio::ip::address::from_string(result[3].str(), ec), atoi(result[5].str().c_str()));
         if (ec) return endpoint();
 
-        ep.proto_ = str2proto(result[2].str());
-        ep.path_ = result[6].str();
+        ep.set_proto(str2proto(result[2].str()));
+        ep.set_path(result[6].str());
         return ep;
     }
 

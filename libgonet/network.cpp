@@ -25,9 +25,9 @@ namespace network {
         *local_addr_ = endpoint::from_string(url, ec);
         if (ec) return ec;
 
-        if (local_addr_->proto_ == proto_type::tcp || local_addr_->proto_ == proto_type::ssl) {
+        if (local_addr_->proto() == proto_type::tcp || local_addr_->proto() == proto_type::ssl) {
             protocol_ = tcp::instance();
-        } else if (local_addr_->proto_ == proto_type::udp) {
+        } else if (local_addr_->proto() == proto_type::udp) {
             protocol_ = udp::instance();
         } else {
             return MakeNetworkErrorCode(eNetworkErrorCode::ec_unsupport_protocol);
@@ -35,7 +35,9 @@ namespace network {
 
         impl_ = protocol_->CreateServer();
         this->Link(*impl_->GetOptions());
-        return impl_->goStartBeforeFork(*local_addr_);
+        ec = impl_->goStartBeforeFork(*local_addr_);
+        *local_addr_ = impl_->LocalAddr();
+        return ec;
     }
     void Server::goStartAfterFork()
     {
@@ -47,9 +49,9 @@ namespace network {
         *local_addr_ = endpoint::from_string(url, ec);
         if (ec) return ec;
 
-        if (local_addr_->proto_ == proto_type::tcp || local_addr_->proto_ == proto_type::ssl) {
+        if (local_addr_->proto() == proto_type::tcp || local_addr_->proto() == proto_type::ssl) {
             protocol_ = tcp::instance();
-        } else if (local_addr_->proto_ == proto_type::udp) {
+        } else if (local_addr_->proto() == proto_type::udp) {
             protocol_ = udp::instance();
         } else {
             return MakeNetworkErrorCode(eNetworkErrorCode::ec_unsupport_protocol);
@@ -57,7 +59,9 @@ namespace network {
 
         impl_ = protocol_->CreateServer();
         this->Link(*impl_->GetOptions());
-        return impl_->goStart(*local_addr_);
+        ec = impl_->goStart(*local_addr_);
+        *local_addr_ = impl_->LocalAddr();
+        return ec;
     }
     void Server::Shutdown()
     {
@@ -88,9 +92,9 @@ namespace network {
         *local_addr_ = endpoint::from_string(url, ec);
         if (ec) return ec;
 
-        if (local_addr_->proto_ == proto_type::tcp || local_addr_->proto_ == proto_type::ssl) {
+        if (local_addr_->proto() == proto_type::tcp || local_addr_->proto() == proto_type::ssl) {
             protocol_ = tcp::instance();
-        } else if (local_addr_->proto_ == proto_type::udp) {
+        } else if (local_addr_->proto() == proto_type::udp) {
             protocol_ = udp::instance();
         } else {
             return MakeNetworkErrorCode(eNetworkErrorCode::ec_unsupport_protocol);

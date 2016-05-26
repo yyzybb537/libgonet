@@ -26,6 +26,16 @@ namespace network {
     {
         typedef ::boost::asio::ip::basic_endpoint<Protocol> base_t;
 
+        struct ext_t
+        {
+            proto_type proto_;
+            std::string path_;
+
+            ext_t() : proto_(proto_type::unkown) {}
+            explicit ext_t(proto_type proto) : proto_(proto) {}
+            ext_t(proto_type proto, std::string const& path) : proto_(proto), path_(path) {}
+        };
+
         endpoint() {}
         endpoint(const endpoint&) = default;
         endpoint(endpoint&&) = default;
@@ -43,7 +53,14 @@ namespace network {
         template <typename Proto>
             explicit endpoint(::boost::asio::ip::basic_endpoint<Proto> const& ep,
                     proto_type proto)
-            : base_t(ep.address(), ep.port()), proto_(proto)
+            : base_t(ep.address(), ep.port()), ext_(proto)
+            {
+            }
+
+        template <typename Proto>
+            explicit endpoint(::boost::asio::ip::basic_endpoint<Proto> const& ep,
+                    ext_t const& ext)
+            : base_t(ep.address(), ep.port()), ext_(ext)
             {
             }
 
@@ -55,6 +72,31 @@ namespace network {
         operator ::boost::asio::ip::udp::endpoint() const
         {
             return ::boost::asio::ip::udp::endpoint(address(), port()); 
+        }
+
+        proto_type proto() const
+        {
+            return ext_.proto_;
+        }
+
+        void set_proto(proto_type proto)
+        {
+            ext_.proto_ = proto;
+        }
+
+        std::string const& path() const
+        {
+            return ext_.path_;
+        }
+
+        void set_path(std::string const& path)
+        {
+            ext_.path_ = path;
+        }
+
+        ext_t const& ext() const
+        {
+            return ext_;
         }
 
         std::string to_string(boost_ec & ec) const;
@@ -70,8 +112,8 @@ namespace network {
         //  zk://127.0.0.1:2181,192.168.1.10:2181/zk_path/node
         static endpoint from_string(std::string const& url, boost_ec & ec);
 
-        proto_type proto_ = proto_type::unkown;
-        std::string path_;
+    private:
+        ext_t ext_;
     };
 
     typedef std::vector<char> Buffer;
@@ -159,6 +201,7 @@ namespace network {
         virtual OptionsBase* GetOptions() = 0;
         virtual boost_ec goStartBeforeFork(endpoint addr) = 0;
         virtual void goStartAfterFork() {}
+        virtual endpoint LocalAddr() = 0;
     };
     struct ClientBase
     {

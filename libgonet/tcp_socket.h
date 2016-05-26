@@ -37,7 +37,7 @@ namespace network {
 #if ENABLE_SSL
                 tcp_ssl_socket_.reset(new ssl::stream<tcp::socket>(ios, *ctx));
 #else
-                throw std::invalid_argument("Not support ssl, please rebuild libgonet with cmake option: -DENABLE_SSL");
+                throw std::invalid_argument("Not support ssl, please rebuild libgonet with cmake option: -DENABLE_SSL=ON");
 #endif
             }
         }

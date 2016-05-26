@@ -17,10 +17,10 @@ class UdpPointImpl;
 struct _udp_sess_id_t : public ::network::SessionBase
 {
     shared_ptr<UdpPointImpl> udp_point;
-    udp::endpoint remote_addr;
+    endpoint remote_addr;
 
     _udp_sess_id_t(shared_ptr<UdpPointImpl> const& point,
-            udp::endpoint const& addr)
+            endpoint const& addr)
         : udp_point(point), remote_addr(addr)
     {}
 
@@ -46,22 +46,21 @@ public:
     void Shutdown();
     boost_ec Connect(endpoint addr);
     boost_ec Send(std::string const& host, uint16_t port, const void* data, std::size_t bytes);
-    boost_ec Send(udp::endpoint destition, const void* data, std::size_t bytes);
+    boost_ec Send(endpoint destition, const void* data, std::size_t bytes);
     boost_ec Send(const void* data, size_t bytes);
-    udp::endpoint LocalAddr();
-    udp::endpoint RemoteAddr();
+    endpoint LocalAddr();
+    endpoint RemoteAddr();
     udp_sess_id_t GetSession();
 
 private:
     virtual void OnSetMaxPackSize() override;
-    boost_ec goStart(udp::endpoint local_endpoint);
     void DoRecv();
 
     static io_service& GetUdpIoService();
 
 private:
-    udp::endpoint local_addr_;
-    udp::endpoint remote_addr_;
+    endpoint local_addr_;
+    endpoint remote_addr_;
     shared_ptr<udp::socket> socket_;
     std::atomic<bool> shutdown_{false};
     std::atomic<bool> init_{false};
@@ -103,7 +102,7 @@ public:
     {
         return impl_->Send(host, port, data, bytes);
     }
-    boost_ec Send(udp::endpoint destition, const void* data, std::size_t bytes)
+    boost_ec Send(endpoint destition, const void* data, std::size_t bytes)
     {
         return impl_->Send(destition, data, bytes);
     }
@@ -115,11 +114,11 @@ public:
     {
         return impl_->Send(data, bytes);
     }
-    udp::endpoint LocalAddr()
+    endpoint LocalAddr()
     {
         return impl_->LocalAddr();
     }
-    udp::endpoint RemoteAddr()
+    endpoint RemoteAddr()
     {
         return impl_->RemoteAddr();
     }
