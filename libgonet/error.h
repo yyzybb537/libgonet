@@ -20,6 +20,7 @@ enum class eNetworkErrorCode : int
     ec_unsupport_protocol  = 9,
     ec_recv_overflow = 10,
     ec_send_overflow = 11,
+    ec_dns_not_found = 12,
 };
 
 class network_error_category

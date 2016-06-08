@@ -309,6 +309,7 @@ namespace tcp_detail {
             return ;
         } else {
             // half sended, locked still.
+            buf.erase(buf.begin(), buf.begin() + written);
             auto msg = boost::make_shared<Msg>(++msg_id_, cb);
             msg->buf.swap(buf);
             msg->pos = written;
@@ -326,9 +327,63 @@ namespace tcp_detail {
     }
     void TcpSession::SendNoDelay(const void* data, size_t bytes, SndCb const& cb)
     {
-        Buffer buf(bytes);
-        memcpy(&buf[0], data, bytes);
-        SendNoDelay(std::move(buf), cb);
+        if (!data || !bytes) {
+            if (cb)
+                cb(boost_ec());
+            return ;
+        }
+
+        if (recv_shutdown_ || send_shutdown_) {
+            if (cb)
+                cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+            return ;
+        }
+
+        if (socket_->type() == tcp_socket_type_t::ssl) {
+            Send(data, bytes, cb);
+            return ;
+        }
+
+        std::unique_lock<co::LFLock> send_token(send_mtx_, std::defer_lock);
+        if (!send_token.try_lock()) {
+            Send(data, bytes, cb);
+            return ;
+        }
+
+        if (sending_) {
+            Send(data, bytes, cb);
+            return ;
+        }
+
+        ssize_t written = ::write_f(socket_->native_handle(), data, bytes);
+        if (written <= 0) {
+            // send error.
+            send_token.unlock();
+            Send(data, bytes, cb);
+            return ;
+        } else if (written >= (ssize_t)bytes) {
+            // all bytes sended.
+            send_token.unlock();
+            if (cb)
+                cb(boost_ec());
+            return ;
+        } else {
+            // half sended, locked still.
+            Buffer buf((char*)data + written, (char*)data + bytes);
+            auto msg = boost::make_shared<Msg>(++msg_id_, cb);
+            msg->buf.swap(buf);
+            msg->pos = written;
+            msg->send_half = true;
+            if (opt_.sndtimeo_) {
+                msg->tid = co_timer_add(std::chrono::milliseconds(opt_.sndtimeo_),
+                        [=]{
+                            msg->timeout = true;
+                        });
+            }
+            // 放到队列头
+            msg_send_list_.push_front(msg);
+            sending_ = true;
+        }
     }
 
     void TcpSession::Send(Buffer && buf, SndCb const& cb)

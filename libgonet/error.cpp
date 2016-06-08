@@ -48,6 +48,9 @@ std::string network_error_category::message(int v) const
 
         case (int)eNetworkErrorCode::ec_recv_overflow:
             return "(network)recv buf overflow";
+
+        case (int)eNetworkErrorCode::ec_dns_not_found:
+            return "(network)dns not found";
     }
 
     return "";

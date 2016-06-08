@@ -160,6 +160,7 @@ namespace network {
 
     class SessionEntry
     {
+        static FakeSession fake_sess;
         typedef boost::shared_ptr<SessionBase> SessionImpl;
         SessionImpl impl_;
 
@@ -176,7 +177,10 @@ namespace network {
 
         // This method can avoid dereference null pointer crash.
         // It's always returns a valid pointer.
-        SessionBase* operator->() const;
+        inline SessionBase* operator->() const
+        {
+            return GetPtr();
+        }
 
         friend bool operator<(SessionEntry const& lhs, SessionEntry const& rhs)
         {
@@ -188,7 +192,10 @@ namespace network {
         }
 
     private:
-        SessionBase* GetPtr() const;
+        inline SessionBase* GetPtr() const
+        {
+            return impl_ ? impl_.get() : (SessionBase*)&fake_sess;
+        }
     };
 
     typedef boost::function<size_t(SessionEntry, const char* data, size_t bytes)> ReceiveCb;

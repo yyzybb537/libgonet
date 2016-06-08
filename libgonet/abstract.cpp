@@ -1,6 +1,10 @@
 #include "abstract.h"
+#include <netdb.h>
+#include <arpa/inet.h>
 
 namespace network {
+
+    FakeSession SessionEntry::fake_sess;
 
     void FakeSession::SendNoDelay(Buffer &&, const SndCb & cb)
     {
@@ -41,21 +45,6 @@ namespace network {
     SessionEntry::SessionEntry(SessionImpl impl)
         : impl_(impl)
     {}
-
-    network::SessionBase* SessionEntry::operator->() const 
-    {
-        return GetPtr();
-    }
-
-    SessionBase* SessionEntry::GetPtr() const
-    {
-        if (!impl_) {
-            static FakeSession fake_sess;
-            return &fake_sess;
-        }
-
-        return impl_.get();
-    }
 
     char const* proto_type_s[] = {
         "unkown",
@@ -168,8 +157,24 @@ namespace network {
             return endpoint();
         }
 
-        endpoint ep(::boost::asio::ip::address::from_string(result[3].str(), ec), atoi(result[5].str().c_str()));
-        if (ec) return endpoint();
+        std::string host = result[3].str();
+        boost::asio::ip::address addr = ::boost::asio::ip::address::from_string(host, ec);
+        if (ec) {
+            // dns resolve
+            hostent* h = gethostbyname(host.c_str());
+            if (!h || !*h->h_addr_list) {
+                ec = MakeNetworkErrorCode(eNetworkErrorCode::ec_dns_not_found);
+                return endpoint();
+            }
+
+            char buf[128];
+            host = inet_ntop(h->h_addrtype, *h->h_addr_list, buf, sizeof(buf));
+            addr = ::boost::asio::ip::address::from_string(host, ec);
+            if (ec)
+                return endpoint();
+        }
+
+        endpoint ep(addr, atoi(result[5].str().c_str()));
 
         ep.set_proto(str2proto(result[2].str()));
         ep.set_path(result[6].str());

@@ -55,15 +55,19 @@ void start_client(std::string url)
                 while (pos < bytes) {
                     size_t n = std::min<size_t>(g_package, bytes - pos);
                     if (g_nodelay_flag) {
-                        sess->SendNoDelay((char*)data + pos, n, [&, n](boost_ec ec){
-                            if (ec) g_client_send_err += n;
-                            else g_client_send += n;
-                            });
+                        sess->SendNoDelay((char*)data + pos, n
+//                            , [&, n](boost_ec ec){
+//                                if (ec) g_client_send_err += n;
+//                                else g_client_send += n;
+//                            }
+                            );
                     } else {
-                        sess->Send((char*)data + pos, n, [&, n](boost_ec ec){
-                            if (ec) g_client_send_err += n;
-                            else g_client_send += n;
-                            });
+                        sess->Send((char*)data + pos, n
+//                            , [&, n](boost_ec ec){
+//                                if (ec) g_client_send_err += n;
+//                                else g_client_send += n;
+//                            }
+                            );
                     }
                     pos += n;
                 }
