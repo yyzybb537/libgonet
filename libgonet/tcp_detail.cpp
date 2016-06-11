@@ -12,6 +12,35 @@ namespace tcp_detail {
         return ios;
     }
 
+    boost::shared_ptr<TcpSession::Msg> TcpSession::Msg::s_pool;
+    boost::shared_ptr<TcpSession::Msg> TcpSession::Msg::GetMsg()
+    {
+        if (!s_pool) {
+            return boost::make_shared<Msg>();
+        }
+
+        boost::shared_ptr<Msg> head = s_pool;
+        s_pool = head->pool_next;
+        head->pool_next.reset();
+        return head;
+    }
+    void TcpSession::Msg::PutMsg(boost::shared_ptr<TcpSession::Msg> msg)
+    {
+        msg->Reset();
+        msg->pool_next = s_pool;
+        s_pool = msg;
+    }
+    void TcpSession::Msg::Reset()
+    {
+        timeout = false;
+        send_half = shutdown = false;
+        pos = 0;
+        id = 0;
+        cb = SndCb();
+        tid.reset();
+        buf.clear(); // TODO: shirft_kit
+    }
+
     void TcpSession::Msg::Done(boost_ec const& ec)
     {
         if (tid) {
@@ -21,6 +50,8 @@ namespace tcp_detail {
 
         if (cb)
             cb(ec);
+
+        PutMsg(this->shared_from_this());
     }
 
     TcpSession::TcpSession(shared_ptr<tcp_socket> s,
@@ -141,8 +172,11 @@ namespace tcp_detail {
         recv_shutdown_ = true;
         if (send_shutdown_)
             OnClose();
-        else
-            msg_chan_ << boost::make_shared<Msg>(Msg::shutdown_msg_t{});
+        else {
+            auto msg = Msg::GetMsg();
+            msg->shutdown = true;
+            msg_chan_ << msg;
+        }
     }
 
     void TcpSession::goSend()
@@ -310,7 +344,10 @@ namespace tcp_detail {
         } else {
             // half sended, locked still.
             buf.erase(buf.begin(), buf.begin() + written);
-            auto msg = boost::make_shared<Msg>(++msg_id_, cb);
+            auto msg = Msg::GetMsg();
+            msg->id = ++msg_id_;
+            if (cb)
+                msg->cb = cb;
             msg->buf.swap(buf);
             msg->pos = written;
             msg->send_half = true;
@@ -370,7 +407,10 @@ namespace tcp_detail {
         } else {
             // half sended, locked still.
             Buffer buf((char*)data + written, (char*)data + bytes);
-            auto msg = boost::make_shared<Msg>(++msg_id_, cb);
+            auto msg = Msg::GetMsg();
+            msg->id = ++msg_id_;
+            if (cb)
+                msg->cb = cb;
             msg->buf.swap(buf);
             msg->pos = written;
             msg->send_half = true;
@@ -400,7 +440,10 @@ namespace tcp_detail {
             return ;
         }
 
-        auto msg = boost::make_shared<Msg>(++msg_id_, cb);
+        auto msg = Msg::GetMsg();
+        msg->id = ++msg_id_;
+        if (cb)
+            msg->cb = cb;
         msg->buf.swap(buf);
         if (opt_.sndtimeo_) {
             msg->tid = co_timer_add(std::chrono::milliseconds(opt_.sndtimeo_),
@@ -416,9 +459,35 @@ namespace tcp_detail {
     }
     void TcpSession::Send(const void* data, size_t bytes, SndCb const& cb)
     {
-        Buffer buf(bytes);
-        memcpy(&buf[0], data, bytes);
-        Send(std::move(buf), cb);
+        if (!data || !bytes) {
+            if (cb)
+                cb(boost_ec());
+            return ;
+        }
+
+        if (recv_shutdown_ || send_shutdown_) {
+            if (cb)
+                cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+            return ;
+        }
+
+        auto msg = Msg::GetMsg();
+        msg->id = ++msg_id_;
+        if (cb)
+            msg->cb = cb;
+        msg->buf.assign((const char*)data, (const char*)data + bytes);
+        if (opt_.sndtimeo_) {
+            msg->tid = co_timer_add(std::chrono::milliseconds(opt_.sndtimeo_),
+                    [=]{
+                        msg->timeout = true;
+                    });
+        }
+
+        if (!msg_chan_.TryPush(msg)) {
+            msg->Done(MakeNetworkErrorCode(eNetworkErrorCode::ec_send_overflow));
+            return ;
+        }
+
     }
 
     void TcpSession::Shutdown(bool immediately)

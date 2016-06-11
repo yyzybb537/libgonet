@@ -27,7 +27,7 @@ class TcpSession
     public SessionBase
 {
 public:
-    struct Msg
+    struct Msg : public boost::enable_shared_from_this<Msg>
     {
         struct shutdown_msg_t {};
 
@@ -39,10 +39,15 @@ public:
         SndCb cb;
         co_timer_id tid;
         Buffer buf;
+        boost::shared_ptr<Msg> pool_next;
 
-        Msg(uint64_t uid, SndCb ocb) : id(uid), cb(ocb) {}
-        explicit Msg(shutdown_msg_t) : shutdown(true) {}
+        Msg() = default;
+        void Reset();
         void Done(boost_ec const& ec);
+
+        static boost::shared_ptr<Msg> GetMsg();
+        static void PutMsg(boost::shared_ptr<Msg> msg);
+        static boost::shared_ptr<Msg> s_pool;
     };
     typedef co::co_chan<boost::shared_ptr<Msg>> MsgChan;
     typedef std::list<boost::shared_ptr<Msg>> MsgList;
