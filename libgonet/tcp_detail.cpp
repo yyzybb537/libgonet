@@ -35,6 +35,9 @@ namespace tcp_detail {
         local_addr_ = endpoint(s->native_socket().local_endpoint(ignore_ec), endpoint_ext);
         remote_addr_ = endpoint(s->native_socket().remote_endpoint(ignore_ec), endpoint_ext);
         sending_ = false;
+
+        DebugPrint(dbg_session_alive, "TcpSession construct %s:%d",
+                remote_addr_.address().to_string().c_str(), remote_addr_.port());
     }
 
     TcpSession::~TcpSession()
@@ -183,6 +186,7 @@ namespace tcp_detail {
                 // Make buffers
                 buffers.clear();
                 buffers.resize(std::min<int>(msg_send_list_.size(), c_multi));
+                std::size_t write_bytes = 0;
                 int i = 0;
                 auto it = msg_send_list_.begin();
                 while (it != msg_send_list_.end())
@@ -196,6 +200,9 @@ namespace tcp_detail {
 
                     if (i >= c_multi) break;
                     buffers[i] = buffer(&msg->buf[msg->pos], msg->buf.size() - msg->pos);
+                    write_bytes += msg->buf.size() - msg->pos;
+                    DebugPrint(dbg_no_delay, "write buffer (pos=%lu, capacity=%lu)",
+                            msg->pos, msg->buf.size());
 
                     ++it;
                     ++i;
@@ -210,6 +217,8 @@ namespace tcp_detail {
                 // Send Once
                 boost_ec ec;
                 std::size_t n = socket_->write_some(buffers, ec);
+                DebugPrint(dbg_no_delay, "write_some (bytes=%lu) returns %lu. is_error:%d",
+                        write_bytes, n, !!ec);
                 if (ec) {
                     SetCloseEc(ec);
                     DebugPrint(dbg_session_alive, "TcpSession send shutdown with write_some %s:%d",
@@ -309,7 +318,6 @@ namespace tcp_detail {
             return ;
         } else {
             // half sended, locked still.
-            buf.erase(buf.begin(), buf.begin() + written);
             auto msg = boost::make_shared<Msg>(++msg_id_, cb);
             msg->buf.swap(buf);
             msg->pos = written;
@@ -346,16 +354,20 @@ namespace tcp_detail {
 
         std::unique_lock<co::LFLock> send_token(send_mtx_, std::defer_lock);
         if (!send_token.try_lock()) {
+            DebugPrint(dbg_no_delay, "Send token try_lock failed.");
             Send(data, bytes, cb);
             return ;
         }
 
         if (sending_) {
+            DebugPrint(dbg_no_delay, "in sending.");
             Send(data, bytes, cb);
             return ;
         }
 
         ssize_t written = ::write_f(socket_->native_handle(), data, bytes);
+        DebugPrint(dbg_no_delay, "Send no delay(bytes=%lu) returns %ld.",
+                bytes, written);
         if (written <= 0) {
             // send error.
             send_token.unlock();
@@ -372,7 +384,7 @@ namespace tcp_detail {
             Buffer buf((char*)data + written, (char*)data + bytes);
             auto msg = boost::make_shared<Msg>(++msg_id_, cb);
             msg->buf.swap(buf);
-            msg->pos = written;
+            msg->pos = 0;
             msg->send_half = true;
             if (opt_.sndtimeo_) {
                 msg->tid = co_timer_add(std::chrono::milliseconds(opt_.sndtimeo_),

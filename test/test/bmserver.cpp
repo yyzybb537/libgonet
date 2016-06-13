@@ -40,8 +40,10 @@ void start_server(std::string url)
 
     s.SetListenBacklog(1024);
     s.SetMaxPackSize(recv_buffer_length);
-    s.SetDisconnectedCb([&](SessionEntry, boost_ec const&){
+    s.SetMaxPackSizeHard(-1);
+    s.SetDisconnectedCb([&](SessionEntry, boost_ec const& ec){
                 --g_conn;
+//                cout << "disconnect error:" << ec.message() << endl;
                 })
         .SetReceiveCb(
                 [&](SessionEntry sess, const void* data, size_t bytes)
@@ -141,7 +143,8 @@ void show_status()
 
 int main(int argc, char** argv)
 {
-//    co_sched.GetOptions().debug = network::dbg_session_alive;
+//    co_sched.GetOptions().debug = network::dbg_no_delay | network::dbg_session_alive;
+//    co_sched.GetOptions().debug_output = fopen("logserver", "w");
 //    co_sched.GetOptions().enable_coro_stat = true;
 //    co_sched.GetOptions().debug = network::dbg_session_alive | co::dbg_hook;
     co_sched.GetOptions().enable_work_steal = false;

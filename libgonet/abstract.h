@@ -7,7 +7,8 @@ namespace network {
     static const uint64_t dbg_accept_error           = co::dbg_sys_max;
     static const uint64_t dbg_accept_debug           = co::dbg_sys_max << 1;
     static const uint64_t dbg_session_alive          = co::dbg_sys_max << 2;
-    static const uint64_t dbg_network_max            = dbg_session_alive;
+    static const uint64_t dbg_no_delay               = co::dbg_sys_max << 3;
+    static const uint64_t dbg_network_max            = dbg_no_delay;
 
     enum class proto_type {
         unkown,

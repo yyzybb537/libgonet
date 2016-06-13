@@ -41,6 +41,7 @@ void start_client(std::string url)
 #endif
 
     c.SetMaxPackSize(recv_buffer_length);
+    c.SetMaxPackSizeHard(-1);
     c.SetConnectedCb([&](SessionEntry sess){
             ++g_conn;
             sess->SetSocketOptNoDelay(g_nodelay_flag);
@@ -77,6 +78,7 @@ void start_client(std::string url)
     c.SetDisconnectedCb([](SessionEntry, boost_ec ec){
 //            printf("client: disconnected!\n");
             --g_conn;
+//            cout << "disconnect error:" << ec.message() << endl;
             });
     boost_ec ec = c.Connect(url);
     if (ec) {
@@ -140,7 +142,8 @@ void show_status()
 
 int main(int argc, char** argv)
 {
-//    co_sched.GetOptions().debug = network::dbg_session_alive;
+//    co_sched.GetOptions().debug = network::dbg_no_delay | network::dbg_session_alive;
+//    co_sched.GetOptions().debug_output = fopen("logclient", "w");
 //    co_sched.GetOptions().enable_coro_stat = true;
 //    co_sched.GetOptions().debug = network::dbg_session_alive | co::dbg_hook;
     co_sched.GetOptions().enable_work_steal = false;
