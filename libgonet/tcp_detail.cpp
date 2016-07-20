@@ -1,3 +1,8 @@
+/*
+* Change:
+*   @2016-07-20 yyz 当队列中积压了很多超时的待发送数据时, 由于超时导致的无数据可发,
+*                   此时再yield就会导致其他逻辑写入更多的数据, 形成雪崩且无法恢复.
+*/
 #include "tcp_detail.h"
 #include <chrono>
 #include <boost/bind.hpp>
@@ -159,8 +164,9 @@ namespace tcp_detail {
             {
                 std::unique_lock<co::LFLock> send_token(send_mtx_);
 
-                int remain = c_multi - msg_send_list_.size();
-                for (int i = 0; i < remain; ++i)
+                int remain = std::max(0, c_multi - (int)msg_send_list_.size());
+                int insert_c = 0;
+                while (insert_c < remain)
                 {
                     boost::shared_ptr<Msg> msg;
                     if (!msg_chan_.TryPop(msg)) {
@@ -179,15 +185,18 @@ namespace tcp_detail {
                         return ;
                     } else if (msg->timeout) {
                         msg->Done(MakeNetworkErrorCode(eNetworkErrorCode::ec_timeout));
-                    } else
+                    } else {
+                        ++ insert_c;
                         msg_send_list_.push_back(msg);
+                    }
                 }
 
                 // Make buffers
                 buffers.clear();
                 buffers.resize(std::min<int>(msg_send_list_.size(), c_multi));
+
                 std::size_t write_bytes = 0;
-                int i = 0;
+                int buffer_size = 0;
                 auto it = msg_send_list_.begin();
                 while (it != msg_send_list_.end())
                 {
@@ -198,19 +207,17 @@ namespace tcp_detail {
                         continue;
                     }
 
-                    if (i >= c_multi) break;
-                    buffers[i] = buffer(&msg->buf[msg->pos], msg->buf.size() - msg->pos);
+                    if (buffer_size >= c_multi) break;
+                    buffers[buffer_size] = buffer(&msg->buf[msg->pos], msg->buf.size() - msg->pos);
                     write_bytes += msg->buf.size() - msg->pos;
                     DebugPrint(dbg_no_delay, "write buffer (pos=%lu, capacity=%lu)",
                             msg->pos, msg->buf.size());
 
                     ++it;
-                    ++i;
+                    ++buffer_size;
                 }
-                buffers.resize(i);
-
+                buffers.resize(buffer_size);
                 if (buffers.empty()) {
-                    co_yield;
                     continue;
                 }
 
