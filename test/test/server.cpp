@@ -7,6 +7,8 @@ using namespace network;
 
 int main(int argc, char** argv)
 {
+    co_sched.GetOptions().debug = dbg_session_alive;
+
     if (argc >= 2 && strcmp(argv[1], "-h") == 0) {
         printf("Usage: %s url\n\n", argv[0]);
         exit(1);
@@ -35,7 +37,7 @@ int main(int argc, char** argv)
         printf("receive: %.*s\n", (int)bytes, data);
         sess->Send(data, bytes);
         if (strstr(std::string(data, bytes).c_str(), "shutdown")) {
-            sess->Shutdown();
+            sess->Shutdown(false);
         }
         return bytes;
     });

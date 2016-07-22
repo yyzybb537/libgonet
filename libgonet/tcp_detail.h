@@ -14,13 +14,11 @@ using namespace boost::asio::ip;
 using boost_ec = boost::system::error_code;
 using boost::shared_ptr;
 
-class TcpSession;
-typedef shared_ptr<TcpSession> TcpSessionEntry;
 class LifeHolder {};
 
 io_service& GetTcpIoService();
 
-class TcpServerImpl;
+class TcpServer;
 class TcpSession
     : public Options<TcpSession>,
     public boost::enable_shared_from_this<TcpSession>,
@@ -51,13 +49,13 @@ public:
             OptionsData & opt, endpoint::ext_t const& endpoint_ext);
     ~TcpSession();
     void goStart();
-    TcpSessionEntry GetSession();
+    SessionEntry GetSession();
 
     virtual void SendNoDelay(Buffer && buf, SndCb const& cb = NULL) override;
     virtual void SendNoDelay(const void* data, size_t bytes, SndCb const& cb = NULL) override;
     virtual void Send(Buffer && buf, SndCb const& cb = NULL) override;
     virtual void Send(const void* data, size_t bytes, SndCb const& cb = NULL) override;
-    virtual void Shutdown(bool immediately = false) override;
+    virtual void Shutdown(bool immediately = true) override;
     virtual boost_ec SetSocketOptNoDelay(bool is_nodelay) override;
     virtual bool IsEstab() override;
     virtual endpoint LocalAddr() override;
@@ -86,6 +84,7 @@ private:
     co_mutex close_ec_mutex_;
     boost_ec close_ec_;
 
+    std::atomic<bool> initiative_shutdown_{false};
     std::atomic<bool> send_shutdown_{false};
     std::atomic<bool> recv_shutdown_{false};
     co_mutex closed_;
@@ -94,19 +93,21 @@ private:
     endpoint remote_addr_;
 };
 
-class TcpServerImpl
-    : public Options<TcpServerImpl>, public LifeHolder, public boost::enable_shared_from_this<TcpServerImpl>
+class TcpServer
+    : public Options<TcpServer>, public ServerBase, public LifeHolder,
+    public boost::enable_shared_from_this<TcpServer>
 {
 public:
     typedef std::map<::network::SessionEntry, shared_ptr<TcpSession>> Sessions;
 
-    boost_ec goStartBeforeFork(endpoint addr);
-    void goStartAfterFork();
+    boost_ec goStartBeforeFork(endpoint addr) override;
+    void goStartAfterFork() override;
 
-    boost_ec goStart(endpoint addr);
-    void ShutdownAll();
-    void Shutdown();
-    endpoint LocalAddr();
+    boost_ec goStart(endpoint addr) override;
+    void Shutdown(bool immediately = true) override;
+    endpoint LocalAddr() override;
+    OptionsBase* GetOptions() override { return this; }
+
     std::size_t SessionCount();
 
 private:
@@ -122,63 +123,19 @@ private:
     friend TcpSession;
 };
 
-class TcpServer
-    : public Options<TcpServer>, public ServerBase
+
+// Tcp客户端
+// TcpSession与TcpClient互相智能指针, 断开连接时才会断开循环引用,
+// 因此TcpClient析构时一定是连接已经断开, 无需等待.
+class TcpClient
+    : public Options<TcpClient>, public ClientBase, public LifeHolder, public boost::enable_shared_from_this<TcpClient>
 {
 public:
-    TcpServer() : impl_(new TcpServerImpl())
-    {
-        Link(*impl_);
-    }
+    boost_ec Connect(endpoint addr) override;
 
-    ~TcpServer()
-    {
-        Shutdown();
-    }
+    SessionEntry GetSession() override;
 
-    boost_ec goStartBeforeFork(endpoint addr) override
-    {
-        return impl_->goStartBeforeFork(addr);
-    }
-    void goStartAfterFork() override
-    {
-        impl_->goStartAfterFork();
-    }
-    boost_ec goStart(endpoint addr) override
-    {
-        return impl_->goStart(addr);
-    }
-
-    void ShutdownAll()
-    {
-        impl_->ShutdownAll();
-    }
-
-    void Shutdown() override
-    {
-        impl_->Shutdown();
-    }
-
-    endpoint LocalAddr()
-    {
-        return impl_->LocalAddr();
-    }
-
-    OptionsBase* GetOptions() override
-    {
-        return this;
-    }
-
-private:
-    shared_ptr<TcpServerImpl> impl_;
-};
-
-class TcpClientImpl
-    : public Options<TcpClientImpl>, public LifeHolder, public boost::enable_shared_from_this<TcpClientImpl>
-{
-public:
-    boost_ec Connect(endpoint addr);
-    TcpSessionEntry GetSession();
+    OptionsBase* GetOptions() override { return this; }
 
 private:
     void OnSessionClose(::network::SessionEntry id, boost_ec const& ec);
@@ -187,36 +144,6 @@ private:
     shared_ptr<TcpSession> sess_;
     co_mutex connect_mtx_;
     friend TcpSession;
-    friend class TcpClient;
-};
-
-class TcpClient
-    : public Options<TcpClient>, public ClientBase
-{
-public:
-    TcpClient() : impl_(new TcpClientImpl())
-    {
-        Link(*impl_);
-    }
-    ~TcpClient();
-
-    boost_ec Connect(endpoint addr)
-    {
-        auto impl = impl_;
-        return impl->Connect(addr);
-    }
-    SessionEntry GetSession()
-    {
-        return impl_->GetSession();
-    }
-    OptionsBase* GetOptions()
-    {
-        return this;
-    }
-    void Shutdown(bool immediately = false);
-
-private:
-    shared_ptr<TcpClientImpl> impl_;
 };
 
 } //namespace tcp_detail

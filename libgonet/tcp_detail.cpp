@@ -24,8 +24,12 @@ namespace tcp_detail {
             tid.reset();
         }
 
-        if (cb)
-            cb(ec);
+        if (cb) {
+            // 安全地回调, 防止recursive-callback.
+            SndCb caller;
+            caller.swap(cb);
+            caller(ec);
+        }
     }
 
     TcpSession::TcpSession(shared_ptr<tcp_socket> s,
@@ -133,14 +137,25 @@ namespace tcp_detail {
         };
     }
 
+    void TcpSession::Shutdown(bool immediately)
+    {
+        SetCloseEc(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
+        DebugPrint(dbg_session_alive, "TcpSession initiative shutdown. is immediately:%s, remote addr %s:%d",
+                immediately ? "true" : "false",
+                remote_addr_.address().to_string().c_str(), remote_addr_.port());
+        initiative_shutdown_ = true;
+
+        if (immediately)
+            socket_->shutdown(socket_base::shutdown_both);
+        msg_chan_.TryPush(boost::make_shared<Msg>(Msg::shutdown_msg_t{}));
+    }
+
     void TcpSession::ShutdownSend()
     {
         socket_->shutdown(socket_base::shutdown_send);
         send_shutdown_ = true;
         if (recv_shutdown_)
             OnClose();
-        else
-            socket_->shutdown(socket_base::shutdown_receive);
     }
 
     void TcpSession::ShutdownRecv()
@@ -149,8 +164,10 @@ namespace tcp_detail {
         recv_shutdown_ = true;
         if (send_shutdown_)
             OnClose();
-        else
-            msg_chan_ << boost::make_shared<Msg>(Msg::shutdown_msg_t{});
+        else {
+            msg_chan_.TryPush(boost::make_shared<Msg>(Msg::shutdown_msg_t{}));
+            socket_->shutdown(socket_base::shutdown_send);
+        }
     }
 
     void TcpSession::goSend()
@@ -160,10 +177,17 @@ namespace tcp_detail {
             auto holder = this_ptr;
             const int c_multi = std::min<int>(64, boost::asio::detail::max_iov_len);
             std::vector<const_buffer> buffers;
+            bool msg_shutdown = false;
             for (;;)
             {
-                std::unique_lock<co::LFLock> send_token(send_mtx_);
+                if (msg_shutdown) {
+                    DebugPrint(dbg_session_alive, "TcpSession send shutdown with message. %s:%d.",
+                            remote_addr_.address().to_string().c_str(), remote_addr_.port());
+                    ShutdownSend();
+                    return ;
+                }
 
+                std::unique_lock<co::LFLock> send_token(send_mtx_);
                 int remain = std::max(0, c_multi - (int)msg_send_list_.size());
                 int insert_c = 0;
                 while (insert_c < remain)
@@ -171,18 +195,26 @@ namespace tcp_detail {
                     boost::shared_ptr<Msg> msg;
                     if (!msg_chan_.TryPop(msg)) {
                         if (msg_send_list_.empty()) {
-                            sending_ = false;
-                            send_token.unlock();
-                            msg_chan_ >> msg;
-                            send_token.lock();
+                            if (initiative_shutdown_) {
+                                DebugPrint(dbg_session_alive, "TcpSession send shutdown with initiative_shutdown flag. %s:%d.",
+                                        remote_addr_.address().to_string().c_str(), remote_addr_.port());
+                                ShutdownSend();
+                                return ;
+                            } else {
+                                sending_ = false;
+                                send_token.unlock();
+                                msg_chan_ >> msg;
+                                send_token.lock();
+                            }
                         } else {
                             break;
                         }
                     }
 
                     if (msg->shutdown) {    // shutdown notify
-                        ShutdownSend();
-                        return ;
+                        msg_shutdown = true;
+                        DebugPrint(dbg_session_alive, "goSend get shutdown msg.");
+                        break;
                     } else if (msg->timeout) {
                         msg->Done(MakeNetworkErrorCode(eNetworkErrorCode::ec_send_timeout));
                     } else {
@@ -223,13 +255,47 @@ namespace tcp_detail {
 
                 // Send Once
                 boost_ec ec;
-                std::size_t n = socket_->write_some(buffers, ec);
+                std::size_t n = 0;
+                pollfd pfd = { socket_->native_handle(), POLLOUT, 0 };
+                int timeo = opt_.sndtimeo_ > 0 ? std::max(opt_.sndtimeo_ / 2, 1) : -1;
+
+                ::boost::asio::detail::buffer_sequence_adapter<
+                    ::boost::asio::const_buffer,
+                    std::vector<const_buffer>> bufs(buffers);
+retry_write:
+                ssize_t nbytes = ::writev_f(socket_->native_handle(), bufs.buffers(), bufs.count());
+                if (nbytes < 0) {
+                    if (errno == EINTR) {
+                        goto retry_write;
+                    } else if (errno == EAGAIN) {
+retry_poll:
+                        if (!msg_shutdown) {
+                            pfd.revents = 0;
+                            DebugPrint(dbg_session_alive, "goSend enter poll(timeout=%d)", timeo);
+                            int res = ::poll(&pfd, 1, timeo);
+                            DebugPrint(dbg_session_alive, "goSend exit poll(timeout=%d)", timeo);
+                            if (res < 0) {
+                                if (errno == EINTR) goto retry_poll;
+                                ec = boost_ec(errno, boost::system::system_category());
+                            } else if (pfd.revents == POLLOUT) {
+                                goto retry_write;
+                            }
+                        }
+                    } else {
+                        ec = boost_ec(errno, boost::system::system_category());
+                    }
+                } else {
+                    n = (std::size_t)nbytes;
+                }
+
+//                std::size_t n = socket_->write_some(buffers, ec);
                 DebugPrint(dbg_no_delay, "write_some (bytes=%lu) returns %lu. is_error:%d",
                         write_bytes, n, !!ec);
                 if (ec) {
                     SetCloseEc(ec);
-                    DebugPrint(dbg_session_alive, "TcpSession send shutdown with write_some %s:%d",
-                            remote_addr_.address().to_string().c_str(), remote_addr_.port());
+                    DebugPrint(dbg_session_alive, "TcpSession send shutdown with write. %s:%d. error %d:%s",
+                            remote_addr_.address().to_string().c_str(), remote_addr_.port(),
+                            ec.value(), ec.message().c_str());
                     ShutdownSend();
                     return ;
                 }
@@ -277,6 +343,8 @@ namespace tcp_detail {
             msg->Done(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
         msg_send_list_.clear();
 
+        // 这个回调会减少TcpSession的引用计数, 进入析构. 因此一定要放在函数尾部。
+        // 并且前面不能用Guard类操作.
         if (this->opt_.disconnect_cb_)
             this->opt_.disconnect_cb_(GetSession(), close_ec_);
     }
@@ -289,7 +357,7 @@ namespace tcp_detail {
             return ;
         }
 
-        if (recv_shutdown_ || send_shutdown_) {
+        if (recv_shutdown_ || send_shutdown_ || initiative_shutdown_) {
             if (cb)
                 cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
             return ;
@@ -348,7 +416,7 @@ namespace tcp_detail {
             return ;
         }
 
-        if (recv_shutdown_ || send_shutdown_) {
+        if (recv_shutdown_ || send_shutdown_ || initiative_shutdown_) {
             if (cb)
                 cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
             return ;
@@ -413,7 +481,7 @@ namespace tcp_detail {
             return ;
         }
 
-        if (recv_shutdown_ || send_shutdown_) {
+        if (recv_shutdown_ || send_shutdown_ || initiative_shutdown_) {
             if (cb)
                 cb(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
             return ;
@@ -440,11 +508,6 @@ namespace tcp_detail {
         Send(std::move(buf), cb);
     }
 
-    void TcpSession::Shutdown(bool immediately)
-    {
-        SetCloseEc(MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
-        socket_->shutdown(immediately ? socket_base::shutdown_both : socket_base::shutdown_receive);
-    }
     boost_ec TcpSession::SetSocketOptNoDelay(bool is_nodelay)
     {
         boost_ec ec;
@@ -471,12 +534,12 @@ namespace tcp_detail {
         return msg_chan_.size();
     }
 
-    TcpSessionEntry TcpSession::GetSession()
+    SessionEntry TcpSession::GetSession()
     {
         return this->shared_from_this();
     }
 
-    boost_ec TcpServerImpl::goStartBeforeFork(endpoint addr)
+    boost_ec TcpServer::goStartBeforeFork(endpoint addr)
     {
         try {
             acceptor_.reset(new tcp::acceptor(GetTcpIoService()));
@@ -490,7 +553,7 @@ namespace tcp_detail {
         }
         return boost_ec();
     }
-    void TcpServerImpl::goStartAfterFork()
+    void TcpServer::goStartAfterFork()
     {
         auto this_ptr = this->shared_from_this();
         go_dispatch(egod_robin) [this_ptr] {
@@ -498,7 +561,7 @@ namespace tcp_detail {
         };
     }
 
-    boost_ec TcpServerImpl::goStart(endpoint addr)
+    boost_ec TcpServer::goStart(endpoint addr)
     {
         boost_ec ec = goStartBeforeFork(addr);
         if (ec) return ec;
@@ -506,25 +569,17 @@ namespace tcp_detail {
         goStartAfterFork();
         return ec;
     }
-    void TcpServerImpl::ShutdownAll()
-    {
-        {
-            std::lock_guard<co_mutex> lock(sessions_mutex_);
-            for (auto &v : sessions_)
-                v.second->Shutdown(true);
-        }
-
-        while (!sessions_.empty())
-            co_sleep(1);
-    }
-    void TcpServerImpl::Shutdown()
+    void TcpServer::Shutdown(bool immediately)
     {
         shutdown_ = true;
         if (acceptor_)
             shutdown(acceptor_->native_handle(), socket_base::shutdown_both);
-        ShutdownAll();
+
+        std::lock_guard<co_mutex> lock(sessions_mutex_);
+        for (auto &v : sessions_)
+            v.second->Shutdown(immediately);
     }
-    void TcpServerImpl::Accept()
+    void TcpServer::Accept()
     {
         auto this_ptr = this->shared_from_this();
         tcp_context ctx(tcp_socket::create_tcp_context(opt_.ssl_option_));
@@ -571,14 +626,16 @@ namespace tcp_detail {
                 shared_ptr<TcpSession> sess(new TcpSession(s, this->shared_from_this(), opt_, local_addr_.ext()));
 
                 {
+                    std::unique_lock<co_mutex> lock(sessions_mutex_);
                     if (shutdown_) {
-                        sess->Shutdown(true);
+                        lock.unlock();
+                        sess->Shutdown();
                         return;
                     } else if (sessions_.size() >= opt_.max_connection_) {
-                        sess->Shutdown(true);
+                        lock.unlock();
+                        sess->Shutdown();
                         return;
                     } else {
-                        std::lock_guard<co_mutex> lock(sessions_mutex_);
                         sessions_[sess->GetSession()] = sess;
                     }
                 }
@@ -586,14 +643,18 @@ namespace tcp_detail {
                 sess->SetSndTimeout(opt_.sndtimeo_)
                     .SetConnectedCb(opt_.connect_cb_)
                     .SetReceiveCb(opt_.receive_cb_)
-                    .SetDisconnectedCb(boost::bind(&TcpServerImpl::OnSessionClose, this, _1, _2))
+                    .SetDisconnectedCb(boost::bind(&TcpServer::OnSessionClose, this, _1, _2))
                     .goStart();
             };
         }
     }
 
-    void TcpServerImpl::OnSessionClose(::network::SessionEntry id, boost_ec const& ec)
+    void TcpServer::OnSessionClose(::network::SessionEntry id, boost_ec const& ec)
     {
+        // 后面的erase会导致TcpServer引用计数减少, 可能进入析构函数.
+        // 此处引用计数guard以保证析构函数结束后不再执行解锁操作.
+        auto self = this->shared_from_this();   
+
         if (opt_.disconnect_cb_)
             opt_.disconnect_cb_(id, ec);
 
@@ -601,17 +662,17 @@ namespace tcp_detail {
         sessions_.erase(id);
     }
 
-    endpoint TcpServerImpl::LocalAddr()
+    endpoint TcpServer::LocalAddr()
     {
         return local_addr_;
     }
 
-    std::size_t TcpServerImpl::SessionCount()
+    std::size_t TcpServer::SessionCount()
     {
         return sessions_.size();
     }
 
-    boost_ec TcpClientImpl::Connect(endpoint addr)
+    boost_ec TcpClient::Connect(endpoint addr)
     {
         if (sess_ && sess_->IsEstab()) return MakeNetworkErrorCode(eNetworkErrorCode::ec_estab);
         std::unique_lock<co_mutex> lock(connect_mtx_, std::defer_lock);
@@ -632,7 +693,7 @@ namespace tcp_detail {
         sess_->SetSndTimeout(opt_.sndtimeo_)
             .SetConnectedCb(opt_.connect_cb_)
             .SetReceiveCb(opt_.receive_cb_)
-            .SetDisconnectedCb(boost::bind(&TcpClientImpl::OnSessionClose, this, _1, _2));
+            .SetDisconnectedCb(boost::bind(&TcpClient::OnSessionClose, this, _1, _2));
 
         auto sess = sess_;
         go_dispatch(egod_robin) [sess] {
@@ -640,30 +701,20 @@ namespace tcp_detail {
         };
         return boost_ec();
     }
-    TcpSessionEntry TcpClientImpl::GetSession()
+    SessionEntry TcpClient::GetSession()
     {
-        return sess_ ? sess_->GetSession() : TcpSessionEntry();
+        return sess_ ? sess_->GetSession() : SessionEntry();
     }
 
-    void TcpClientImpl::OnSessionClose(::network::SessionEntry id, boost_ec const& ec)
+    void TcpClient::OnSessionClose(::network::SessionEntry id, boost_ec const& ec)
     {
+        // 后面的reset会导致TcpClient引用计数减少, 可能进入析构函数.
+        // 此处引用计数guard以保证析构函数结束后不再执行sess_.reset后续逻辑。
+        auto self = this->shared_from_this();
+
         if (opt_.disconnect_cb_)
             opt_.disconnect_cb_(id, ec);
         sess_.reset();
-    }
-
-    TcpClient::~TcpClient()
-    {
-        Shutdown(true);
-        while (impl_->sess_)
-            co_sleep(1);
-    }
-
-    void TcpClient::Shutdown(bool immediately)
-    {
-        auto sess = impl_->GetSession();
-        if (sess)
-            sess->Shutdown(immediately);
     }
 
 } //namespace tcp_detail

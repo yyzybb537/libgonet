@@ -13,6 +13,7 @@ void on_disconnect(SessionEntry sess, boost_ec const& ec)
 
 void foo(std::string url)
 {
+    co_sched.GetOptions().debug = dbg_session_alive;
     Client client;
 
 #if ENABLE_SSL
@@ -25,26 +26,6 @@ void foo(std::string url)
 
     client.SetConnectedCb([&](SessionEntry sess){
         printf("connected.\n");
-        go [&] {
-            int i = 0;
-            for (;;++i)
-            {
-                if (client.IsEstab()) {
-                    if (i == 3)
-                        client.Send("shutdown", 8, [](boost_ec ec){
-                            printf("send returns %s\n", ec.message().c_str());
-                            });
-                    else
-                        client.Send("ping", 4, [](boost_ec ec){
-                            printf("send returns %s\n", ec.message().c_str());
-                            });
-                }
-                else
-                    return ;
-
-                ::sleep(3);
-            }
-        };
     })
     .SetDisconnectedCb(&on_disconnect)
     .SetReceiveCb([](SessionEntry sess, const char* data, size_t bytes){
@@ -59,6 +40,27 @@ void foo(std::string url)
         printf("connect to %s:%d\n", client.RemoteAddr().address().to_string().c_str(),
                 client.RemoteAddr().port());
     }
+
+    go [&] {
+        int i = 1;
+        for (;;++i)
+        {
+            if (client.IsEstab()) {
+                if (i % 3 == 0)
+                    client.Send("shutdown", 8, [](boost_ec ec){
+                        printf("send returns %s\n", ec.message().c_str());
+                        });
+                else
+                    client.Send("ping", 4, [](boost_ec ec){
+                        printf("send returns %s\n", ec.message().c_str());
+                        });
+            }
+            else
+                printf("not estab.\n");
+
+            ::sleep(3);
+        }
+    };
 
     for (;;)
     {

@@ -3,21 +3,13 @@
 
 namespace network {
 
-    static int __sigignore_pipe()
-    {
-        return sigignore(SIGPIPE);
-    }
-
-    static void sigignore_pipe()
-    {
-        static int v = __sigignore_pipe();
-        (void)v;
-    }
-
     Server::Server()
         : local_addr_(new endpoint)
     {
-        sigignore_pipe();
+    }
+    Server::~Server()
+    {
+        Shutdown(true);
     }
     boost_ec Server::goStartBeforeFork(std::string const& url)
     {
@@ -63,9 +55,10 @@ namespace network {
         *local_addr_ = impl_->LocalAddr();
         return ec;
     }
-    void Server::Shutdown()
+    void Server::Shutdown(bool immediately)
     {
-        impl_.reset();
+        if (impl_)
+            impl_->Shutdown(immediately);
     }
     endpoint Server::LocalAddr()
     {
@@ -78,9 +71,12 @@ namespace network {
     }
 
     Client::Client()
-        : connect_mtx_(new co_mutex), local_addr_(new endpoint)
+        : connect_mtx_(new co_mutex), remote_addr_(new endpoint)
     {
-        sigignore_pipe();
+    }
+    Client::~Client()
+    {
+        Shutdown(true);
     }
     boost_ec Client::Connect(std::string const& url)
     {
@@ -89,12 +85,12 @@ namespace network {
         if (impl_ && impl_->GetSession()->IsEstab()) return MakeNetworkErrorCode(eNetworkErrorCode::ec_estab);
 
         boost_ec ec;
-        *local_addr_ = endpoint::from_string(url, ec);
+        *remote_addr_ = endpoint::from_string(url, ec);
         if (ec) return ec;
 
-        if (local_addr_->proto() == proto_type::tcp || local_addr_->proto() == proto_type::ssl) {
+        if (remote_addr_->proto() == proto_type::tcp || remote_addr_->proto() == proto_type::ssl) {
             protocol_ = tcp::instance();
-        } else if (local_addr_->proto() == proto_type::udp) {
+        } else if (remote_addr_->proto() == proto_type::udp) {
             protocol_ = udp::instance();
         } else {
             return MakeNetworkErrorCode(eNetworkErrorCode::ec_unsupport_protocol);
@@ -102,7 +98,7 @@ namespace network {
 
         impl_ = protocol_->CreateClient();
         this->Link(*impl_->GetOptions());
-        return impl_->Connect(*local_addr_);
+        return impl_->Connect(*remote_addr_);
     }
     void Client::SendNoDelay(Buffer && buf, SndCb const& cb)
     {
@@ -148,17 +144,18 @@ namespace network {
     {
         return impl_ && impl_->GetSession()->IsEstab();
     }
-    void Client::Shutdown()
+    void Client::Shutdown(bool immediately)
     {
-        impl_.reset();
+        if (impl_)
+            impl_->GetSession()->Shutdown(immediately);
     }
     endpoint Client::LocalAddr()
     {
-        return *local_addr_;
+        return impl_ ? impl_->GetSession()->LocalAddr() : endpoint();
     }
     endpoint Client::RemoteAddr()
     {
-        return impl_ ? impl_->GetSession()->RemoteAddr() : endpoint();
+        return *remote_addr_;
     }
     SessionEntry Client::GetSession()
     {

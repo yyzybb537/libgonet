@@ -131,7 +131,7 @@ namespace network {
         virtual void Send(Buffer && buf, SndCb const& cb = NULL) = 0;
         virtual void Send(const void* data, size_t bytes, SndCb const& cb = NULL) = 0;
         virtual bool IsEstab() = 0;
-        virtual void Shutdown(bool immediately = false) = 0;
+        virtual void Shutdown(bool immediately = true) = 0;
         virtual boost_ec SetSocketOptNoDelay(bool is_nodelay) { return boost_ec(); }
         virtual endpoint LocalAddr() = 0;
         virtual endpoint RemoteAddr() = 0;
@@ -205,7 +205,7 @@ namespace network {
     {
         virtual ~ServerBase() {}
         virtual boost_ec goStart(endpoint addr) = 0;
-        virtual void Shutdown() = 0;
+        virtual void Shutdown(bool immediately = true) = 0;
         virtual OptionsBase* GetOptions() = 0;
         virtual boost_ec goStartBeforeFork(endpoint addr) = 0;
         virtual void goStartAfterFork() {}

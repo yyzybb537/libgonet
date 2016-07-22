@@ -11,12 +11,14 @@ namespace network
     {
     public:
         Server();
+        ~Server();
+
         // @url:
         //    tcp://127.0.0.1:3030
         //    udp://127.0.0.1:3030
         boost_ec goStart(std::string const& url);
         endpoint LocalAddr();
-        void Shutdown();
+        void Shutdown(bool immediately = true);
         Protocol const& GetProtocol();
 
         boost_ec goStartBeforeFork(std::string const& url);
@@ -32,6 +34,8 @@ namespace network
     {
     public:
         Client();
+        ~Client();
+
         // @url:
         //    tcp://127.0.0.1:3030
         //    udp://127.0.0.1:3030
@@ -40,7 +44,7 @@ namespace network
         void SendNoDelay(const void* data, size_t bytes, SndCb const& cb = NULL);
         void Send(Buffer && buf, SndCb const& cb = NULL);
         void Send(const void* data, size_t bytes, SndCb const& cb = NULL);
-        void Shutdown();
+        void Shutdown(bool immediately = true);
         bool IsEstab();
         endpoint LocalAddr();
         endpoint RemoteAddr();
@@ -51,7 +55,7 @@ namespace network
         Protocol* protocol_ = nullptr;
         boost::shared_ptr<ClientBase> impl_;
         boost::shared_ptr<co_mutex> connect_mtx_;
-        boost::shared_ptr<endpoint> local_addr_;
+        boost::shared_ptr<endpoint> remote_addr_;
     };
 
 } //namespace network

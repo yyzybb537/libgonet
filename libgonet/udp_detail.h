@@ -13,13 +13,13 @@ using namespace boost::asio::ip;
 using boost_ec = boost::system::error_code;
 using boost::shared_ptr;
 
-class UdpPointImpl;
+class UdpPoint;
 struct _udp_sess_id_t : public ::network::SessionBase
 {
-    shared_ptr<UdpPointImpl> udp_point;
+    shared_ptr<UdpPoint> udp_point;
     endpoint remote_addr;
 
-    _udp_sess_id_t(shared_ptr<UdpPointImpl> const& point,
+    _udp_sess_id_t(shared_ptr<UdpPoint> const& point,
             endpoint const& addr)
         : udp_point(point), remote_addr(addr)
     {}
@@ -29,28 +29,31 @@ struct _udp_sess_id_t : public ::network::SessionBase
     virtual void Send(Buffer && buf, SndCb const& cb = NULL) override;
     virtual void Send(const void* data, size_t bytes, SndCb const& cb = NULL) override;
     virtual bool IsEstab() override;
-    virtual void Shutdown(bool immediately = false) override;
+    virtual void Shutdown(bool immediately = true) override;
     virtual endpoint LocalAddr() override;
     virtual endpoint RemoteAddr() override;
     virtual std::size_t GetSendQueueSize() override;
 };
-typedef shared_ptr<_udp_sess_id_t> udp_sess_id_t;
+typedef boost::shared_ptr<_udp_sess_id_t> udp_sess_id_t;
 
-class UdpPointImpl
-    : public Options<UdpPointImpl>, public boost::enable_shared_from_this<UdpPointImpl>
+class UdpPoint
+    : public Options<UdpPoint>, public ServerBase, public ClientBase,
+    public boost::enable_shared_from_this<UdpPoint>
 {
 public:
-    UdpPointImpl();
+    UdpPoint();
 
-    boost_ec goStart(endpoint addr);
-    void Shutdown();
-    boost_ec Connect(endpoint addr);
+    boost_ec goStartBeforeFork(endpoint addr) override;
+    boost_ec goStart(endpoint addr) override;
+    void Shutdown(bool immediately = true) override;
+    boost_ec Connect(endpoint addr) override;
     boost_ec Send(std::string const& host, uint16_t port, const void* data, std::size_t bytes);
     boost_ec Send(endpoint destition, const void* data, std::size_t bytes);
     boost_ec Send(const void* data, size_t bytes);
-    endpoint LocalAddr();
+    endpoint LocalAddr() override;
     endpoint RemoteAddr();
-    udp_sess_id_t GetSession();
+    OptionsBase* GetOptions() override { return this; }
+    SessionEntry GetSession() override;
 
 private:
     virtual void OnSetMaxPackSize() override;
@@ -68,72 +71,6 @@ private:
     co::co_chan<void> recv_shutdown_channel_{1};
 };
 
-class UdpPoint
-    : public Options<UdpPoint>, public ServerBase, public ClientBase
-{
-public:
-    UdpPoint() : impl_(new UdpPointImpl())
-    {
-        Link(*impl_);
-    }
-
-    virtual ~UdpPoint()
-    {
-        Shutdown();
-    }
-
-    boost_ec goStart(endpoint addr) override
-    {
-        return impl_->goStart(addr);
-    }
-    boost_ec goStartBeforeFork(endpoint addr) override
-    {
-        return impl_->goStart(addr);
-    }
-    void goStartAfterFork() override
-    {
-        // nothing to do.
-    }
-    void Shutdown()
-    {
-        return impl_->Shutdown();
-    }
-    boost_ec Send(std::string const& host, uint16_t port, const void* data, std::size_t bytes)
-    {
-        return impl_->Send(host, port, data, bytes);
-    }
-    boost_ec Send(endpoint destition, const void* data, std::size_t bytes)
-    {
-        return impl_->Send(destition, data, bytes);
-    }
-    boost_ec Connect(endpoint addr)
-    {
-        return impl_->Connect(addr);
-    }
-    boost_ec Send(const void* data, size_t bytes)
-    {
-        return impl_->Send(data, bytes);
-    }
-    endpoint LocalAddr()
-    {
-        return impl_->LocalAddr();
-    }
-    endpoint RemoteAddr()
-    {
-        return impl_->RemoteAddr();
-    }
-    OptionsBase* GetOptions()
-    {
-        return this;
-    }
-    SessionEntry GetSession()
-    {
-        return impl_->GetSession();
-    }
-
-private:
-    shared_ptr<UdpPointImpl> impl_;
-};
 
 typedef UdpPoint UdpServer;
 typedef UdpPoint UdpClient;

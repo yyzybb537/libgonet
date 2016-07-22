@@ -56,19 +56,23 @@ namespace udp_detail {
         return 0;
     }
 
-    UdpPointImpl::UdpPointImpl()
+    UdpPoint::UdpPoint()
     {
         recv_buf_.resize(opt_.max_pack_size_);
         local_addr_ = endpoint(udp::endpoint(udp::v4(), 0));
     }
 
-    io_service& UdpPointImpl::GetUdpIoService()
+    io_service& UdpPoint::GetUdpIoService()
     {
         static io_service ios;
         return ios;
     }
 
-    boost_ec UdpPointImpl::goStart(endpoint local_endpoint)
+    boost_ec UdpPoint::goStartBeforeFork(endpoint addr)
+    {
+        return goStart(addr);
+    }
+    boost_ec UdpPoint::goStart(endpoint local_endpoint)
     {
         if (init_) return MakeNetworkErrorCode(eNetworkErrorCode::ec_estab);
 
@@ -87,7 +91,7 @@ namespace udp_detail {
         };
         return boost_ec();
     }
-    void UdpPointImpl::Shutdown()
+    void UdpPoint::Shutdown(bool)
     {
         if (!init_) return ;
         if (shutdown_) return ;
@@ -100,11 +104,11 @@ namespace udp_detail {
         if (opt_.disconnect_cb_)
             opt_.disconnect_cb_(GetSession(), MakeNetworkErrorCode(eNetworkErrorCode::ec_shutdown));
     }
-    void UdpPointImpl::OnSetMaxPackSize()
+    void UdpPoint::OnSetMaxPackSize()
     {
         recv_buf_.resize(opt_.max_pack_size_);
     }
-    void UdpPointImpl::DoRecv()
+    void UdpPoint::DoRecv()
     {
         for (;;)
         {
@@ -131,12 +135,12 @@ namespace udp_detail {
         recv_shutdown_channel_ << nullptr;
     }
 
-    boost_ec UdpPointImpl::Send(std::string const& host, uint16_t port, const void* data, std::size_t bytes)
+    boost_ec UdpPoint::Send(std::string const& host, uint16_t port, const void* data, std::size_t bytes)
     {
         endpoint dst(address::from_string(host), port);
         return Send(dst, data, bytes);
     }
-    boost_ec UdpPointImpl::Send(endpoint destition, const void* data, std::size_t bytes)
+    boost_ec UdpPoint::Send(endpoint destition, const void* data, std::size_t bytes)
     {
         boost_ec ec;
         if (!init_) {
@@ -148,7 +152,7 @@ namespace udp_detail {
         if (n < bytes) return MakeNetworkErrorCode(eNetworkErrorCode::ec_half);
         return boost_ec();
     }
-    boost_ec UdpPointImpl::Connect(endpoint addr)
+    boost_ec UdpPoint::Connect(endpoint addr)
     {
         boost_ec ec;
         if (!init_) {
@@ -164,7 +168,7 @@ namespace udp_detail {
         }
         return ec;
     }
-    boost_ec UdpPointImpl::Send(const void* data, size_t bytes)
+    boost_ec UdpPoint::Send(const void* data, size_t bytes)
     {
         boost_ec ec;
         if (!init_) {
@@ -176,15 +180,15 @@ namespace udp_detail {
         if (n < bytes) return MakeNetworkErrorCode(eNetworkErrorCode::ec_half);
         return boost_ec();
     }
-    endpoint UdpPointImpl::LocalAddr()
+    endpoint UdpPoint::LocalAddr()
     {
         return local_addr_;
     }
-    endpoint UdpPointImpl::RemoteAddr()
+    endpoint UdpPoint::RemoteAddr()
     {
         return remote_addr_;
     }
-    udp_sess_id_t UdpPointImpl::GetSession()
+    SessionEntry UdpPoint::GetSession()
     {
         return boost::make_shared<_udp_sess_id_t>(this->shared_from_this(), remote_addr_);
     }
