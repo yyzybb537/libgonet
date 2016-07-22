@@ -8,19 +8,23 @@ using boost_ec = boost::system::error_code;
 
 enum class eNetworkErrorCode : int
 {
-    ec_ok           = 0,
-    ec_connecting   = 1,
-    ec_estab        = 2,
-    ec_shutdown     = 3,
-    ec_half         = 4,
-    ec_no_destition = 5,
-    ec_timeout      = 6,
-    ec_url_parse_error  = 7,
-    ec_data_parse_error  = 8,
-    ec_unsupport_protocol  = 9,
-    ec_recv_overflow = 10,
-    ec_send_overflow = 11,
-    ec_dns_not_found = 12,
+    ec_ok                   = 0,
+    ec_connecting           = 1,
+    ec_estab                = 2,
+    ec_shutdown             = 3,
+    ec_half                 = 4,
+    ec_no_destition         = 5,
+    ec_send_timeout         = 6,
+    ec_recv_timeout         = 7,
+    ec_url_parse_error      = 8,
+    ec_data_parse_error     = 9,
+    ec_unsupport_protocol   = 10,
+    ec_recv_overflow        = 11,
+    ec_send_overflow        = 12,
+    ec_dns_not_found        = 13,
+
+    // 兼容
+    ec_timeout = ec_send_timeout,
 };
 
 class network_error_category

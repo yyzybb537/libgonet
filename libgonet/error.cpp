@@ -34,8 +34,11 @@ std::string network_error_category::message(int v) const
         case (int)eNetworkErrorCode::ec_no_destition:
             return "(network)udp send must be appoint a destition address";
 
-        case (int)eNetworkErrorCode::ec_timeout:
-            return "(network)time out";
+        case (int)eNetworkErrorCode::ec_send_timeout:
+            return "(network)send time out";
+
+        case (int)eNetworkErrorCode::ec_recv_timeout:
+            return "(network)recv time out";
 
         case (int)eNetworkErrorCode::ec_url_parse_error:
             return "(network)url parse error";

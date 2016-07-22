@@ -184,7 +184,7 @@ namespace tcp_detail {
                         ShutdownSend();
                         return ;
                     } else if (msg->timeout) {
-                        msg->Done(MakeNetworkErrorCode(eNetworkErrorCode::ec_timeout));
+                        msg->Done(MakeNetworkErrorCode(eNetworkErrorCode::ec_send_timeout));
                     } else {
                         ++ insert_c;
                         msg_send_list_.push_back(msg);
@@ -202,7 +202,7 @@ namespace tcp_detail {
                 {
                     auto &msg = *it;
                     if (msg->timeout && !msg->send_half) {
-                        msg->Done(MakeNetworkErrorCode(eNetworkErrorCode::ec_timeout));
+                        msg->Done(MakeNetworkErrorCode(eNetworkErrorCode::ec_send_timeout));
                         it = msg_send_list_.erase(it);
                         continue;
                     }
