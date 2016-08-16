@@ -19,6 +19,12 @@ C++ network library based on `libgo`.
 启动客户端：
 
     $ ./bmclient.t
+    
+四核测试：
+
+    $ ./bmserver.t 64 0 160 4
+    $ ./bmclient.t 64 10 1000 0 160 4
+    
 
 ## Demo
 
