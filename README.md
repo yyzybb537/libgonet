@@ -1,6 +1,27 @@
 # libgonet
 C++ network library based on `libgo`.
 
+## Benchmark
+
+性能测试步骤(先安装boost1.59+)：
+
+    $ mkdir build -p && cd build
+    $ cmake .. -DENABLE_BOOST_CONTEXT=ON
+    $ make
+    $ sudo make install
+    $ cd ../test/test
+    $ make -j4
+  
+启动服务端：
+
+    $ ./bmserver.t
+  
+启动客户端：
+
+    $ ./bmclient.t
+
+## Demo
+
 ~~~~~~~~~~cpp
 /**************************************************
 * 一个简单的echo server.
