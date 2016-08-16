@@ -25,6 +25,12 @@ C++ network library based on `libgo`.
     $ ./bmserver.t 64 0 160 4
     $ ./bmclient.t 64 10 1000 0 160 4
     
+性能指标：
+
+    CPU: Intel(R) Core(TM) i7-4770 CPU @ 3.40GHz
+    64Bytes数据包、Pipeline=1000、10连接做pingpong测试：
+        单核：160w QPS
+        四核：270w QPS
 
 ## Demo
 
