@@ -18,6 +18,12 @@ class LifeHolder {};
 
 io_service& GetTcpIoService();
 
+#if LIBGO_SINGLE_THREAD
+typedef bool std_atomic_bool;
+#else
+typedef std::atomic<bool> std_atomic_bool;
+#endif
+
 class TcpServer;
 class TcpSession
     : public Options<TcpSession>,
@@ -29,7 +35,7 @@ public:
     {
         struct shutdown_msg_t {};
 
-        std::atomic<bool> timeout{false};
+        std_atomic_bool timeout{false};
         bool send_half = false;
         bool shutdown = false;
         std::size_t pos = 0;
@@ -84,9 +90,9 @@ private:
     co_mutex close_ec_mutex_;
     boost_ec close_ec_;
 
-    std::atomic<bool> initiative_shutdown_{false};
-    std::atomic<bool> send_shutdown_{false};
-    std::atomic<bool> recv_shutdown_{false};
+    std_atomic_bool initiative_shutdown_{false};
+    std_atomic_bool send_shutdown_{false};
+    std_atomic_bool recv_shutdown_{false};
     co_mutex closed_;
 
     endpoint local_addr_;
@@ -119,7 +125,7 @@ private:
     endpoint local_addr_;
     co_mutex sessions_mutex_;
     Sessions sessions_;
-    std::atomic<bool> shutdown_{false};
+    std_atomic_bool shutdown_{false};
     friend TcpSession;
 };
 
