@@ -37,6 +37,6 @@ install(TARGETS ${TARGET} LIBRARY DESTINATION "lib" ARCHIVE DESTINATION "lib")
 install(DIRECTORY libgonet/ DESTINATION "include/libgonet" FILES_MATCHING PATTERN "*.h")
 
 if (NOT NO_SUB)
-    #option(ENABLE_BOOST_CONTEXT "use boost coroutine" ON)
+    option(ENABLE_BOOST_CONTEXT "use boost coroutine" ON)
     add_subdirectory("third_party/libgo")
 endif()
