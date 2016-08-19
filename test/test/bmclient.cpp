@@ -3,6 +3,9 @@
 #include <boost/thread.hpp>
 #include <atomic>
 #include <libgonet/network.h>
+#if PROFILE
+#include <gperftools/profiler.h>
+#endif
 using namespace std;
 using namespace co;
 using namespace network;
@@ -45,6 +48,9 @@ void start_client(std::string url)
     c.SetConnectedCb([&](SessionEntry sess){
             ++g_conn;
             sess->SetSocketOptNoDelay(g_nodelay_flag);
+#if PROFILE
+            ProfilerStart("client.prof");
+#endif
             })
         .SetReceiveCb(
             [&](SessionEntry sess, const void* data, size_t bytes)
@@ -78,6 +84,9 @@ void start_client(std::string url)
     c.SetDisconnectedCb([](SessionEntry, boost_ec ec){
 //            printf("client: disconnected!\n");
             --g_conn;
+#if PROFILE
+            ProfilerStop();
+#endif
 //            cout << "disconnect error:" << ec.message() << endl;
             });
     boost_ec ec = c.Connect(url);
