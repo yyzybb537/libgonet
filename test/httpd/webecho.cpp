@@ -1,6 +1,9 @@
 #include <iostream>
 #include <unistd.h>
 #include <libgonet/network.h>
+#if PROFILE
+#include <gperftools/profiler.h>
+#endif
 using namespace std;
 using namespace co;
 using namespace network;
@@ -22,10 +25,21 @@ hello world!";
 
     Server server;
 
+    int connection = 0;
+
     server.SetConnectedCb([&](SessionEntry sess){
-        printf("connected from %s:%d\n", sess->RemoteAddr().address().to_string().c_str(), sess->RemoteAddr().port());
-    }).SetDisconnectedCb([](SessionEntry, boost_ec const& ec) {
-        printf("disconnected. reason %d:%s\n", ec.value(), ec.message().c_str());
+        ++ connection;
+#if PROFILE
+        ProfilerStart("webecho.prof");
+#endif
+        printf("connected from %s:%d conn=%d\n", sess->RemoteAddr().address().to_string().c_str(), sess->RemoteAddr().port(), connection);
+    }).SetDisconnectedCb([&](SessionEntry, boost_ec const& ec) {
+        -- connection;
+        printf("disconnected. reason %d:%s conn=%d\n", ec.value(), ec.message().c_str(), connection);
+#if PROFILE
+        if (!connection)
+            ProfilerStop();
+#endif
     }).SetReceiveCb([&](SessionEntry sess, const char* data, size_t bytes){
         // find http header split chars
         static const char* splits = "\r\n\r\n";
