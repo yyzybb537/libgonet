@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <signal.h>
 #include <libgo/coroutine.h>
-#include <libgo/linux/linux_glibc_hook.h>
 #if PROFILE
 #include <gperftools/profiler.h>
 #endif

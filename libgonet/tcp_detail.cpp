@@ -6,7 +6,6 @@
 #include "tcp_detail.h"
 #include <chrono>
 #include <boost/bind.hpp>
-#include "linux_glibc_hook.h"
 
 namespace network {
 namespace tcp_detail {
@@ -58,6 +57,7 @@ namespace tcp_detail {
     void TcpSession::goStart()
     {
         co::initialize_socket_async_methods(socket_->native_handle());
+        co::set_et_mode(socket_->native_handle());
         if (opt_.connect_cb_)
             opt_.connect_cb_(GetSession());
 
