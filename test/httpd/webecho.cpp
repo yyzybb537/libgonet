@@ -42,16 +42,16 @@ hello world!";
 #endif
     }).SetReceiveCb([&](SessionEntry sess, const char* data, size_t bytes){
         // find http header split chars
-        static const char* splits = "\r\n\r\n";
-        for (int i = (int)bytes - 4; i >= 0; --i) {
-            if (*(int*)(data + i) == *(const int*)(const char*)(&splits[0])) {
+//        static const char* splits = "\r\n\r\n";
+//        for (int i = (int)bytes - 4; i >= 0; --i) {
+//            if (*(int*)(data + i) == *(const int*)(const char*)(&splits[0])) {
                 // http header
                 sess->SendNoDelay(html.c_str(), html.length());
                 return bytes;
-            }
-        }
-
-        return bytes - 3;
+//            }
+//        }
+//
+//        return bytes - 3;
     });
     boost_ec ec = server.goStart(url);
     if (ec) {

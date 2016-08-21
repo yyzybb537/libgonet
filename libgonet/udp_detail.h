@@ -65,8 +65,8 @@ private:
     endpoint local_addr_;
     endpoint remote_addr_;
     shared_ptr<udp::socket> socket_;
-    std::atomic<bool> shutdown_{false};
-    std::atomic<bool> init_{false};
+    co::atomic_t<bool> shutdown_{false};
+    co::atomic_t<bool> init_{false};
     Buffer recv_buf_;
     co::co_chan<void> recv_shutdown_channel_{1};
 };
