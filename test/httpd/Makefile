@@ -5,8 +5,8 @@ LINK=-L../../build -L../../build/third_party/libgo -L../../third_party/libgo/thi
 	 -lboost_coroutine -lboost_context -lboost_thread -lboost_system -lboost_regex
 
 LINK+=-ltcmalloc_minimal
-CFLAGS+=-DPROFILE=1
-LINK+=-lprofiler -lunwind
+#CFLAGS+=-DPROFILE=1
+#LINK+=-lprofiler -lunwind
 LINK+=-lpthread -lssl -lcrypto -static
 
 TARGET=$(patsubst %.cpp, %.t, $(wildcard *.cpp))
