@@ -271,6 +271,7 @@ retry_write:
 retry_poll:
                         if (!msg_shutdown) {
                             pfd.revents = 0;
+                            co::reset_writable(socket_->native_handle());
                             DebugPrint(dbg_session_alive, "goSend enter poll(timeout=%d)", timeo);
                             int res = ::poll(&pfd, 1, timeo);
                             DebugPrint(dbg_session_alive, "goSend exit poll(timeout=%d)", timeo);
