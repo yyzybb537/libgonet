@@ -47,16 +47,21 @@ int main(int argc, char** argv)
         return 0;
     }
 
+    co::AsyncCoroutinePool* asyncPool = co::AsyncCoroutinePool::Create() ;
+    asyncPool->Start(1);
+
     OptionsAcceptAspect aop_accept;
-    aop_accept.before_aspect = [sem_id] {
-        co_await(void) [sem_id]{
+    aop_accept.before_aspect = [sem_id, asyncPool] {
+        co_chan<void> done(1);
+        asyncPool->Post(done, [sem_id]{
             sembuf sb;
             sb.sem_num = 0;
             sb.sem_op = -1;
             sb.sem_flg = 0;
             printf("[%d] call semop\n", getpid());
             semop(sem_id, &sb, 1);
-        };
+        });
+        done >> nullptr;
         printf("[%d] enter accept.\n", getpid());
     };
     aop_accept.after_aspect = [sem_id] {
@@ -101,10 +106,7 @@ int main(int argc, char** argv)
         if (!fork())
             break;
 
-    // thread must create after fork.
-    boost::thread th([]{ co_sched.GetThreadPool().RunLoop(); });
-
     server.goStartAfterFork();
 
-    co_sched.RunUntilNoTask();
+    co_sched.Start();
 }

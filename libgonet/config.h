@@ -31,4 +31,4 @@
 #include <signal.h>
 
 // libgo
-#include <libgo/coroutine.h>
+#include <libgo/libgo.h>

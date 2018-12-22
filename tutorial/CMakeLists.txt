@@ -10,10 +10,12 @@ else()
     set(CMAKE_BUILD_TYPE RELEASE)
 endif()
 
+include_directories(${PROJECT_SOURCE_DIR}/..)
+link_directories(${PROJECT_SOURCE_DIR}/../build)
 aux_source_directory(${PROJECT_SOURCE_DIR} SRC_LIST)
 
-set(LINK_ARGS libgonet libgo libgo_main boost_context boost_regex boost_system boost_thread pthread dl)
-set(LINK_ARGS ${LINK_ARGS} ssl crypto)
+set(LINK_ARGS libgonet libgo boost_regex boost_system boost_thread pthread dl)
+#set(LINK_ARGS ${LINK_ARGS} ssl crypto)
 
 foreach(var ${SRC_LIST})
     string(REGEX REPLACE ".*/" "" var ${var})
@@ -21,6 +23,6 @@ foreach(var ${SRC_LIST})
 
     set(target ${tgt}.t)
     add_executable(${target} ${var})
-    target_link_libraries(${target} ${LINK_ARGS} rt)
+    target_link_libraries(${target} ${LINK_ARGS})
 endforeach(var)
 

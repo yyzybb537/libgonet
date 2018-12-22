@@ -13,7 +13,7 @@ void on_disconnect(SessionEntry sess, boost_ec const& ec)
 
 void foo(std::string url)
 {
-    co_sched.GetOptions().debug = dbg_session_alive;
+    co_opt.debug = dbg_session_alive;
     Client client;
 
 #if ENABLE_SSL
@@ -84,7 +84,7 @@ int main(int argc, char **argv)
     }
 
     go [url]{ foo(url); };
-    co_sched.RunUntilNoTask();
+    co_sched.Start();
     return 0;
 }
 

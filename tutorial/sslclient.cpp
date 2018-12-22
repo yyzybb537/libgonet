@@ -58,6 +58,6 @@ int main()
     }
 
     // Step6: 启动协程调度器
-    co_sched.RunUntilNoTask();
+    co_sched.Start();
     return 0;
 }

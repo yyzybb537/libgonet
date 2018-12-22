@@ -146,17 +146,14 @@ void show_status()
     last_client_send_err = g_client_send_err;
     last_client_recv = g_client_recv;
     last_qps = g_qps;
-
-    co_timer_add(std::chrono::seconds(1), [=]{ show_status(); });
 }
 
 int main(int argc, char** argv)
 {
-//    co_sched.GetOptions().debug = network::dbg_no_delay | network::dbg_session_alive;
-//    co_sched.GetOptions().debug_output = fopen("logserver", "w");
-//    co_sched.GetOptions().enable_coro_stat = true;
-//    co_sched.GetOptions().debug = network::dbg_session_alive | co::dbg_hook;
-    co_sched.GetOptions().enable_work_steal = false;
+//    co_opt.debug = network::dbg_no_delay | network::dbg_session_alive;
+//    co_opt.debug_output = fopen("logserver", "w");
+//    co_opt.enable_coro_stat = true;
+//    co_opt.debug = network::dbg_session_alive | co::dbg_hook;
 
     if (argc > 1 && argv[1] == std::string("-h")) {
         printf("Usage %s [PackageSize] [NoDelay] [recv_buffer_length(KB)] [Threads] [URL]\n\n", argv[0]);
@@ -182,11 +179,14 @@ int main(int argc, char** argv)
         g_url = argv[5];
 
     go [&]{ start_server(g_url); };
-    co_timer_add(std::chrono::milliseconds(100), [=]{ show_status(); });
-    boost::thread_group tg;
-    for (int i = 0; i < g_thread_count; ++i)
-        tg.create_thread([]{ co_sched.RunLoop(); });
-    tg.join_all();
+    go []{
+        for (;;) {
+            co_sleep(100);
+            show_status();
+        }
+    };
+
+    co_sched.Start(g_thread_count);
     return 0;
 }
 

@@ -7,7 +7,7 @@ using namespace network;
 
 int main(int argc, char** argv)
 {
-    co_sched.GetOptions().debug = dbg_session_alive;
+    co_opt.debug = dbg_session_alive;
 
     if (argc >= 2 && strcmp(argv[1], "-h") == 0) {
         printf("Usage: %s url\n\n", argv[0]);
@@ -49,5 +49,5 @@ int main(int argc, char** argv)
                 server.LocalAddr().port());
     }
 
-    co_sched.RunUntilNoTask();
+    co_sched.Start();
 }

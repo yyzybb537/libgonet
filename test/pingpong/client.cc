@@ -50,53 +50,45 @@ int main(int argc, char* argv[])
 {
     if (argc != 7)
     {
-        fprintf(stderr, "Usage: client <host_ip> <port> <threads> <blocksize> "
+        fprintf(stderr, "Usage: client <host> <port> <threads> <blocksize> "
                 "<sessions> <time>\n");
+        exit(1);
     }
-    else
+
+    const char* ip = argv[1];
+    uint16_t port = static_cast<uint16_t>(atoi(argv[2]));
+    int threadCount = atoi(argv[3]);
+    blockSize = atoi(argv[4]);
+    int sessionCount = atoi(argv[5]);
+    timeout = atoi(argv[6]);
+
+    std::string url = std::string("tcp://") + ip +  ":" + std::to_string(port);
+    start_time = system_clock::now();
+
+    std::list<network::Client*> clients;
+    for (int i = 0; i < sessionCount; ++i)
     {
-        const char* ip = argv[1];
-        uint16_t port = static_cast<uint16_t>(atoi(argv[2]));
-        int threadCount = atoi(argv[3]);
-        blockSize = atoi(argv[4]);
-        int sessionCount = atoi(argv[5]);
-        timeout = atoi(argv[6]);
-
-        std::string url = std::string("tcp://") + ip +  ":" + std::to_string(port);
-        start_time = system_clock::now();
-
-        std::list<network::Client*> clients;
-        for (int i = 0; i < sessionCount; ++i)
-        {
-            network::Client *client = new network::Client;
-            client->SetConnectedCb(&onConnection);
-            client->SetReceiveCb(&onMessage);
-            boost_ec ec = client->Connect(url);
-            if (ec) {
-                printf("connect to %s:%d error: %s\n", ip, port, ec.message().c_str());
-                return 1;
-            }
-            clients.push_back(client);
+        network::Client *client = new network::Client;
+        client->SetConnectedCb(&onConnection);
+        client->SetReceiveCb(&onMessage);
+        boost_ec ec = client->Connect(url);
+        if (ec) {
+            printf("connect to %s:%d error: %s\n", ip, port, ec.message().c_str());
+            return 1;
         }
-
-        printf("connect server %s:%d\n", ip, port);
-
-        go [&] {
-            sleep(timeout);
-            for (auto *c : clients)
-                c->Shutdown();
-            show();
-            exit(0);
-        };
-
-        boost::thread_group tg;
-        for (int i = 0; i < threadCount; ++i)
-        {
-            tg.create_thread([]{
-                    co_sched.RunLoop();
-                    });
-        }
-        tg.join_all();
+        clients.push_back(client);
     }
+
+    printf("connect server %s:%d\n", ip, port);
+
+    go [&] {
+        sleep(timeout);
+        for (auto *c : clients)
+            c->Shutdown();
+        show();
+        co_sched.Stop();
+    };
+
+    co_sched.Start(threadCount);
 }
 

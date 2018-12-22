@@ -17,6 +17,7 @@ using boost::shared_ptr;
 class LifeHolder {};
 
 io_service& GetTcpIoService();
+co_timer& GetTimer();
 
 class TcpServer;
 class TcpSession
@@ -142,7 +143,7 @@ private:
 
 private:
     shared_ptr<TcpSession> sess_;
-    co_mutex connect_mtx_;
+    co::LFLock connect_mtx_;
     friend TcpSession;
 };
 

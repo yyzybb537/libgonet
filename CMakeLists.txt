@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
 
-
 ##################################################################################
 project(libgonet)
 
@@ -38,11 +37,3 @@ add_library("${TARGET}" STATIC ${SRC_LIST})
 #set(CMAKE_INSTALL_PREFIX "/usr/local")
 install(TARGETS ${TARGET} LIBRARY DESTINATION "lib" ARCHIVE DESTINATION "lib")
 install(DIRECTORY libgonet/ DESTINATION "include/libgonet" FILES_MATCHING PATTERN "*.h")
-
-if (NOT NO_SUB)
-    option(ENABLE_BOOST_CONTEXT "use boost coroutine" ON)
-	if (ENABLE_SYSTEM_LIBGO)
-	else()
-		add_subdirectory("third_party/libgo")
-	endif()
-endif()

@@ -6,6 +6,7 @@
 #include "tcp_detail.h"
 #include <chrono>
 #include <boost/bind.hpp>
+#include <libgo/netio/unix/hook.h>
 
 namespace network {
 namespace tcp_detail {
@@ -16,11 +17,16 @@ namespace tcp_detail {
         return ios;
     }
 
+    co_timer& GetTimer()
+    {
+        static co_timer timer;
+        return timer;
+    }
+
     void TcpSession::Msg::Done(boost_ec const& ec)
     {
         if (tid) {
-            co_timer_cancel(tid);
-            tid.reset();
+            tid.StopTimer();
         }
 
         if (cb) {
@@ -56,8 +62,6 @@ namespace tcp_detail {
 
     void TcpSession::goStart()
     {
-        co::initialize_socket_async_methods(socket_->native_handle());
-        co::set_et_mode(socket_->native_handle());
         if (opt_.connect_cb_)
             opt_.connect_cb_(GetSession());
 
@@ -80,7 +84,7 @@ namespace tcp_detail {
     void TcpSession::goReceive()
     {
         auto this_ptr = this->shared_from_this();
-        go_dispatch(egod_local_thread) [=]{
+        go [=]{
             auto holder = this_ptr;
             size_t pos = 0;
             for (;;)
@@ -173,7 +177,7 @@ namespace tcp_detail {
     void TcpSession::goSend()
     {
         auto this_ptr = this->shared_from_this();
-        go_dispatch(egod_local_thread) [=]{
+        go [=]{
             auto holder = this_ptr;
             const int c_multi = std::min<int>(64, boost::asio::detail::max_iov_len);
             std::vector<const_buffer> buffers;
@@ -271,7 +275,6 @@ retry_write:
 retry_poll:
                         if (!msg_shutdown) {
                             pfd.revents = 0;
-                            co::reset_writable(socket_->native_handle());
                             DebugPrint(dbg_session_alive, "goSend enter poll(timeout=%d)", timeo);
                             int res = ::poll(&pfd, 1, timeo);
                             DebugPrint(dbg_session_alive, "goSend exit poll(timeout=%d)", timeo);
@@ -399,7 +402,7 @@ retry_poll:
             msg->pos = written;
             msg->send_half = true;
             if (opt_.sndtimeo_) {
-                msg->tid = co_timer_add(std::chrono::milliseconds(opt_.sndtimeo_),
+                msg->tid = GetTimer().ExpireAt(std::chrono::milliseconds(opt_.sndtimeo_),
                         [=]{
                             msg->timeout = true;
                         });
@@ -463,7 +466,7 @@ retry_poll:
             msg->pos = 0;
             msg->send_half = true;
             if (opt_.sndtimeo_) {
-                msg->tid = co_timer_add(std::chrono::milliseconds(opt_.sndtimeo_),
+                msg->tid = GetTimer().ExpireAt(std::chrono::milliseconds(opt_.sndtimeo_),
                         [=]{
                             msg->timeout = true;
                         });
@@ -491,7 +494,7 @@ retry_poll:
         auto msg = boost::make_shared<Msg>(++msg_id_, cb);
         msg->buf.swap(buf);
         if (opt_.sndtimeo_) {
-            msg->tid = co_timer_add(std::chrono::milliseconds(opt_.sndtimeo_),
+            msg->tid = GetTimer().ExpireAt(std::chrono::milliseconds(opt_.sndtimeo_),
                     [=]{
                         msg->timeout = true;
                     });
@@ -557,7 +560,7 @@ retry_poll:
     void TcpServer::goStartAfterFork()
     {
         auto this_ptr = this->shared_from_this();
-        go_dispatch(egod_robin) [this_ptr] {
+        go [this_ptr] {
             this_ptr->Accept();
         };
     }
@@ -620,7 +623,7 @@ retry_poll:
                     s->native_socket().remote_endpoint().address().to_string().c_str(),
                     s->native_socket().remote_endpoint().port());
 
-            go_dispatch(egod_robin) [s, this_ptr, this] {
+            go [s, this_ptr, this] {
                 boost_ec ec = s->handshake(handshake_type_t::server);
                 if (ec) return ;
 
@@ -676,7 +679,7 @@ retry_poll:
     boost_ec TcpClient::Connect(endpoint addr)
     {
         if (sess_ && sess_->IsEstab()) return MakeNetworkErrorCode(eNetworkErrorCode::ec_estab);
-        std::unique_lock<co_mutex> lock(connect_mtx_, std::defer_lock);
+        std::unique_lock<co::LFLock> lock(connect_mtx_, std::defer_lock);
         if (!lock.try_lock()) return MakeNetworkErrorCode(eNetworkErrorCode::ec_connecting);
 
         tcp_context ctx(tcp_socket::create_tcp_context(opt_.ssl_option_));
@@ -697,7 +700,7 @@ retry_poll:
             .SetDisconnectedCb(boost::bind(&TcpClient::OnSessionClose, this, _1, _2));
 
         auto sess = sess_;
-        go_dispatch(egod_robin) [sess] {
+        go [sess] {
             sess->goStart();
         };
         return boost_ec();

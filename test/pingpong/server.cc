@@ -35,35 +35,27 @@ int main(int argc, char* argv[])
 {
     if (argc < 4)
     {
-        fprintf(stderr, "Usage: server <address> <port> <threads>\n");
+        fprintf(stderr, "Usage: server <host> <port> <threads>\n");
+        exit(1);
     }
-    else
-    {
-        const char* ip = argv[1];
-        uint16_t port = static_cast<uint16_t>(atoi(argv[2]));
-        int threadCount = atoi(argv[3]);
-        std::string url = std::string("tcp://") + ip +  ":" + std::to_string(port);
 
-        network::Server server;
-        server.SetConnectedCb(&onConnection);
-        server.SetDisconnectedCb(&onDisconnection);
-        server.SetReceiveCb(&onMessage);
-        boost_ec ec = server.goStart(url);
-        if (ec) {
-            printf("listen %s:%d error: %s\n", ip, port, ec.message().c_str());
-            return 1;
-        }
+    const char* ip = argv[1];
+    uint16_t port = static_cast<uint16_t>(atoi(argv[2]));
+    int threadCount = atoi(argv[3]);
+    std::string url = std::string("tcp://") + ip +  ":" + std::to_string(port);
 
-        printf("listen %s:%d\n", ip, port);
-
-        boost::thread_group tg;
-        for (int i = 0; i < threadCount; ++i)
-        {
-            tg.create_thread([]{
-                    co_sched.RunLoop();
-                    });
-        }
-        tg.join_all();
+    network::Server server;
+    server.SetConnectedCb(&onConnection);
+    server.SetDisconnectedCb(&onDisconnection);
+    server.SetReceiveCb(&onMessage);
+    boost_ec ec = server.goStart(url);
+    if (ec) {
+        printf("listen %s:%d error: %s\n", ip, port, ec.message().c_str());
+        return 1;
     }
+
+    printf("listen %s:%d\n", ip, port);
+
+    co_sched.Start(threadCount);
 }
 

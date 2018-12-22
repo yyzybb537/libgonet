@@ -86,7 +86,7 @@ namespace udp_detail {
         local_addr_ = endpoint(socket_->local_endpoint(ignore_ec), local_endpoint.ext());
         init_ = true;
         auto this_ptr = this->shared_from_this();
-        go_dispatch(egod_robin) [this_ptr] {
+        go [this_ptr] {
             this_ptr->DoRecv();
         };
         return boost_ec();
