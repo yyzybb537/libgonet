@@ -190,7 +190,7 @@ int main(int argc, char** argv)
 
     go []{
         for (;;) {
-            co_sleep(100);
+            sleep(1);
             show_status();
         }
     };
